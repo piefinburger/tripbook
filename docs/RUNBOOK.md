@@ -197,9 +197,11 @@ bash ~/tripbook/deploy/server-setup.sh
 ```
 
 The script installs Docker Engine + compose plugin, adds `ubuntu` to the
-docker group, and copies `.env.example` to `.env`. (It also attempts a git
-clone; the "already exists" error on that step is harmless since you cloned
-first.)
+docker group, and copies `.env.example` to `.env`. It is idempotent: safe
+to re-run, it skips the clone if `~/tripbook` already exists and never
+overwrites an existing `.env`.
+
+Verification: `ls -la ~/tripbook/.env` exists.
 
 Log out and back in (or run `newgrp docker`) so the docker group applies.
 

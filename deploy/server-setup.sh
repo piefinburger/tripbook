@@ -12,9 +12,13 @@ sudo apt-get update
 sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 sudo usermod -aG docker "$USER"
 
-git clone https://github.com/piefinburger/tripbook.git ~/tripbook
+# Idempotent: skip the clone if the repo is already present (e.g. cloned
+# over SSH with a deploy key before running this script).
+if [ ! -d ~/tripbook/.git ]; then
+  git clone https://github.com/piefinburger/tripbook.git ~/tripbook
+fi
 cd ~/tripbook
-cp .env.example .env
+[ -f .env ] || cp .env.example .env
 echo
 echo "Now: edit ~/tripbook/.env (secrets), then run:"
 echo "  newgrp docker && cd ~/tripbook && docker compose up -d --build"
