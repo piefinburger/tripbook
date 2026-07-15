@@ -220,3 +220,12 @@ main.wide { max-width: 1280px; }
 .act-links { margin-left: 8px; }
 .act-links a { color: var(--tide); font-size: 0.78rem; font-weight: 600;
   margin-right: 10px; cursor: pointer; }
+
+/* ---- Two-row trip topbar: nav on top, trip name gets its own line ---- */
+.topbar.tb2 { display: block; padding-bottom: 8px; }
+.tb2 .tb-row { display: flex; align-items: center; justify-content: space-between; }
+.tb2 .tb-name {
+  font-family: Georgia, serif; font-size: 1.25rem; font-weight: 600;
+  color: #fff; margin-top: 4px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
