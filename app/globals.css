@@ -250,3 +250,14 @@ main.wide { max-width: 1280px; }
 .pm-sheet button { width: 100%; }
 .pm-sheet button.danger { background: var(--danger); }
 .pm-sheet button.ghost { background: var(--paper); color: var(--ink); }
+
+/* ---- Add-to-existing-note picking mode ---- */
+.bubble.pick-target { cursor: pointer; outline: 3px dashed var(--tag);
+  outline-offset: 2px; }
+.grp-bar { gap: 10px; align-items: center; }
+.grp-bar .ghost { background: rgba(255,255,255,0.15); color: #fff;
+  width: auto; padding: 8px 12px; margin-left: 10px; }
+
+
+/* timeline photos keep a tappable footprint while loading or broken */
+.pwrap img { min-height: 120px; object-fit: cover; }
