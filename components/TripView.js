@@ -157,16 +157,18 @@ export default function TripView({ tripId }) {
 
   return (
     <>
-      <div className="topbar">
-        <Link href="/" style={{ color: "#cfe3ec" }}>&larr; Trips</Link>
-        <span className="brand">{trip?.name || ""}</span>
-        <span className="row" style={{ gap: 12 }}>
-          <Link href={`/trip/${tripId}/gallery`} style={{ color: "#cfe3ec" }}>Gallery</Link>
-          {(myRole === "owner" || myRole === "admin" || siteAdmin) &&
-            <Link href={`/trip/${tripId}/settings`} style={{ color: "#cfe3ec" }}>Settings</Link>}
-          {myRole !== "viewer" &&
-            <Link href={`/trip/${tripId}/book`} style={{ color: "#f2b441", fontWeight: 700 }}>Book</Link>}
-        </span>
+      <div className="topbar tb2">
+        <div className="tb-row">
+          <Link href="/" style={{ color: "#cfe3ec" }}>&larr; Trips</Link>
+          <span className="row" style={{ gap: 14 }}>
+            <Link href={`/trip/${tripId}/gallery`} style={{ color: "#cfe3ec" }}>Gallery</Link>
+            {(myRole === "owner" || myRole === "admin" || siteAdmin) &&
+              <Link href={`/trip/${tripId}/settings`} style={{ color: "#cfe3ec" }}>Settings</Link>}
+            {myRole !== "viewer" &&
+              <Link href={`/trip/${tripId}/book`} style={{ color: "#f2b441", fontWeight: 700 }}>Book</Link>}
+          </span>
+        </div>
+        <div className="tb-name">{trip?.name || ""}</div>
       </div>
       {pending > 0 && <div className="sync-chip" role="status">
         {pending} item{pending > 1 ? "s" : ""} waiting to sync. Keep the app open on WiFi.
