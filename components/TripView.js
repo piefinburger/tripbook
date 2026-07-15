@@ -28,11 +28,9 @@ export default function TripView({ tripId }) {
   const [groupMeta, setGroupMeta] = useState(null);   // {ts,lat,lng} carried onto the note
   const [photoMenu, setPhotoMenu] = useState(null);    // photoId: ungroup-or-delete sheet
   const [pickingNote, setPickingNote] = useState(false); // choosing a note to add selection to
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState("member");
-  const [inviteMsg, setInviteMsg] = useState("");
-  const [showInvite, setShowInvite] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(false);   // note composer popup
   const fileRef = useRef(null);
+  const libraryRef = useRef(null);
 
   const loadTimeline = useCallback(async () => {
     const r = await fetch(`/api/trips/${tripId}/timeline${person ? `?person=${person}` : ""}`);
@@ -95,7 +93,7 @@ export default function TripView({ tripId }) {
     setAttached(selected);
     setGroupMeta({ ts: first.ts, lat: first.lat ?? null, lng: first.lng ?? null });
     setSelecting(false); setSelected([]);
-    setTimeout(() => document.getElementById("note")?.focus(), 50);
+    setNoteOpen(true);
   }
   async function downloadOriginal(id) {
     const j = await fetch(`/api/photos/${id}`).then(r => r.json());
@@ -131,18 +129,27 @@ export default function TripView({ tripId }) {
     loadTimeline();
   }
 
-  async function onFiles(e) {
+  async function onFiles(e, source = "capture") {
     const files = [...(e.target.files || [])];
     e.target.value = "";
     if (!files.length) return;
     setBusy(true);
     try {
-    const pos = await getPosition();
+    // Camera shots: tag with device location, taken-now. Library picks:
+    // trust the file's own EXIF (date + GPS); never the device location,
+    // which would geotag last week's beach photos with the living room.
+    const pos = source === "capture" ? await getPosition() : {};
     for (const f of files) {
+      let exif = {};
+      if (source === "library" && f.type === "image/jpeg") {
+        try { exif = await readJpegExif(f); } catch {}
+      }
       const blob = await compressImage(f);
       const contentType = blob.type || f.type || "image/jpeg";
-      const meta = { tripId: Number(tripId), contentType,
-        ts: new Date(f.lastModified || Date.now()).toISOString(), ...pos };
+      const meta = { tripId: Number(tripId), contentType, source,
+        ts: (exif.takenAt || new Date(f.lastModified || Date.now())).toISOString(),
+        ...(source === "capture" ? pos
+          : { lat: exif.lat ?? null, lng: exif.lng ?? null }) };
       if (navigator.onLine) {
         try {
           const pre = await fetch("/api/photos/presign", { method: "POST",
@@ -175,7 +182,7 @@ export default function TripView({ tripId }) {
       ts: groupMeta?.ts || new Date().toISOString(), text: note, photoIds: attached,
       ...(groupMeta ? { lat: groupMeta.lat, lng: groupMeta.lng } : await getPosition())
     };
-    setNote(""); setAttached([]); setGroupMeta(null);
+    setNote(""); setAttached([]); setGroupMeta(null); setNoteOpen(false);
     if (navigator.onLine) {
       const r = await fetch("/api/entries", { method: "POST",
         headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
@@ -188,16 +195,7 @@ export default function TripView({ tripId }) {
   // Dictation: iOS keyboard mic works in the textarea; the in-app Web Speech
   // button was removed (unreliable on iOS Safari, redundant with the keyboard).
 
-  async function sendInvite() {
-    setInviteMsg("");
-    const r = await fetch(`/api/trips/${tripId}/invite`, { method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: inviteEmail, role: inviteRole }) });
-    setInviteMsg(r.ok ? `${inviteRole === "viewer" ? "Viewer" : "Contributor"} invite sent to ${inviteEmail}.` : (await r.json()).error);
-    if (r.ok) setInviteEmail("");
-  }
 
-  const joinUrl = trip ? `${location.origin}/join/${trip.invite_code}` : "";
   const days = [];
   for (const it of items) {
     const k = dayKey(it.ts);
@@ -207,6 +205,7 @@ export default function TripView({ tripId }) {
 
   return (
     <>
+      <div className="trip-head">
       <div className="topbar tb2">
         <div className="tb-row">
           <Link href="/" style={{ color: "#cfe3ec" }}>&larr; Trips</Link>
@@ -220,50 +219,22 @@ export default function TripView({ tripId }) {
         </div>
         <div className="tb-name">{trip?.name || ""}</div>
       </div>
+      <div className="trip-filter row">
+        <select aria-label="Filter by person" value={person}
+          onChange={e => setPerson(e.target.value)}>
+          <option value="">Everyone</option>
+          {members.map(m => <option key={m.id} value={m.id}>{m.name || m.email}</option>)}
+        </select>
+        {myRole !== "viewer" &&
+          <button className="small secondary"
+            onClick={() => { setSelecting(v => !v); setSelected([]); setPickingNote(false); }}>
+            {selecting ? "Cancel" : "Group"}</button>}
+      </div>
+      </div>
       {pending > 0 && <div className="sync-chip" role="status">
         {pending} item{pending > 1 ? "s" : ""} waiting to sync. Keep the app open on WiFi.
       </div>}
       <main>
-        <div className="row" style={{ marginBottom: 8 }}>
-          <select aria-label="Filter by person" value={person}
-            onChange={e => setPerson(e.target.value)}>
-            <option value="">Everyone</option>
-            {members.map(m => <option key={m.id} value={m.id}>{m.name || m.email}</option>)}
-          </select>
-          {myRole !== "viewer" &&
-            <button className="small secondary" onClick={() => setShowInvite(s => !s)}>Invite</button>}
-          {myRole !== "viewer" &&
-            <button className="small secondary"
-              onClick={() => { setSelecting(v => !v); setSelected([]); setPickingNote(false); }}>
-              {selecting ? "Cancel" : "Group"}</button>}
-        </div>
-
-        {showInvite && (
-          <div className="card">
-            <b>Invite family</b>
-            <p className="muted" style={{ margin: "4px 0" }}>Share this link (works
-            as a QR code via the iOS share sheet):</p>
-            <input readOnly value={joinUrl} onFocus={e => e.target.select()} />
-            <div className="row" style={{ marginTop: 8 }}>
-              <button className="small" onClick={() => navigator.share?.({ url: joinUrl })
-                ?? navigator.clipboard.writeText(joinUrl)}>Share link</button>
-            </div>
-            <label htmlFor="invemail">Or email an invite</label>
-            <div className="row">
-              <input id="invemail" type="email" value={inviteEmail}
-                onChange={e => setInviteEmail(e.target.value)} placeholder="grandma@example.com" />
-            </div>
-            <div className="row" style={{ marginTop: 6 }}>
-              <select value={inviteRole} onChange={e => setInviteRole(e.target.value)}
-                aria-label="Invite role" style={{ width: "auto" }}>
-                <option value="member">Contributor: adds photos and notes</option>
-                <option value="viewer">Viewer: watches live, adds nothing</option>
-              </select>
-              <button className="small" onClick={sendInvite} disabled={!inviteEmail}>Send</button>
-            </div>
-            {inviteMsg && <p className="muted">{inviteMsg}</p>}
-          </div>
-        )}
 
         {days.length === 0 && (
           <div className="card"><b>Nothing here yet</b>
@@ -343,14 +314,6 @@ export default function TripView({ tripId }) {
             You are following this trip as a viewer. New photos and notes
             appear here live.</p>
         )}
-        {!viewer && <div className="card" style={{ marginTop: 16 }}>
-          <label htmlFor="note">Add a note{attached.length ? ` (${attached.length} photo${attached.length > 1 ? "s" : ""} attached)` : ""}</label>
-          <textarea id="note" rows={3} value={note} onChange={e => setNote(e.target.value)}
-            placeholder="What happened? Tip: the mic on your keyboard works great here." />
-          <div className="row" style={{ marginTop: 8 }}>
-            <button onClick={saveNote} disabled={!note.trim() && !attached.length}>Save note</button>
-          </div>
-        </div>}
       </main>
 
       {selecting && (
@@ -367,6 +330,21 @@ export default function TripView({ tripId }) {
                 }}>New note</button>
                 <button onClick={() => setPickingNote(true)}>Add to a note</button>
               </>}
+        </div>
+      )}
+      {noteOpen && !viewer && (
+        <div className="lightbox" onClick={() => setNoteOpen(false)}>
+          <div className="pm-sheet" onClick={e => e.stopPropagation()}>
+            <b>Add a note{attached.length ? ` (${attached.length} photo${attached.length > 1 ? "s" : ""} attached)` : ""}</b>
+            <textarea id="note" rows={4} autoFocus value={note}
+              onChange={e => setNote(e.target.value)}
+              placeholder="What happened? Tip: the mic on your keyboard works great here." />
+            <button onClick={saveNote} disabled={!note.trim() && !attached.length}>Save note</button>
+            <button className="ghost" onClick={() => {
+              setNoteOpen(false);
+              if (groupMeta) { setAttached([]); setGroupMeta(null); }
+            }}>Cancel</button>
+          </div>
         </div>
       )}
       {photoMenu && (
@@ -399,12 +377,17 @@ export default function TripView({ tripId }) {
           </div>
         </div>
       )}
-      {!viewer && <div className="capture-bar">
-        <button onClick={() => fileRef.current?.click()} disabled={busy}>
+      {!viewer && <div className="capture-bar three">
+        <button className="cb-side" onClick={() => libraryRef.current?.click()} disabled={busy}>
           {busy ? "Adding..." : "Add photos"}
         </button>
+        <button className="cb-camera" onClick={() => fileRef.current?.click()} disabled={busy}
+          aria-label="Open the camera">Camera</button>
+        <button className="cb-side" onClick={() => setNoteOpen(true)}>Add note</button>
         <input ref={fileRef} type="file" accept="image/*" capture="environment"
-          multiple hidden onChange={onFiles} />
+          multiple hidden onChange={e => onFiles(e, "capture")} />
+        <input ref={libraryRef} type="file" accept="image/*"
+          multiple hidden onChange={e => onFiles(e, "library")} />
       </div>}
     </>
   );
