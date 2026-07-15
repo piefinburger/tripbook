@@ -1,0 +1,26 @@
+name: CI
+on:
+  pull_request:
+    branches: [main]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+        env:
+          # build needs no real secrets; runtime env is server-side only
+          DATABASE_URL: postgres://x:x@localhost/x
+      - name: Schema is idempotent (applies twice cleanly)
+        run: |
+          docker run -d --name pg -e POSTGRES_USER=tripbook -e POSTGRES_PASSWORD=ci \
+            -e POSTGRES_DB=tripbook -p 5432:5432 postgres:16-alpine
+          for i in $(seq 1 20); do
+            docker exec pg pg_isready -U tripbook && break; sleep 1; done
+          DATABASE_URL=postgres://tripbook:ci@localhost:5432/tripbook node db/migrate.mjs
+          DATABASE_URL=postgres://tripbook:ci@localhost:5432/tripbook node db/migrate.mjs
