@@ -1,14 +1,18 @@
 import { NextResponse } from "next/server";
 import { q } from "@/lib/db";
-import { currentUser, requireMember } from "@/lib/auth";
+import { currentUser, requireMember, canContribute } from "@/lib/auth";
 import { reverseGeocode } from "@/lib/geocode";
 import { polishText } from "@/lib/book";
+import { emitTrip } from "@/lib/events";
 
 export async function POST(req) {
   const u = await currentUser();
   if (!u) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { tripId, clientId, ts, text, lat, lng, photoIds } = await req.json();
-  try { await requireMember(tripId, u.id); } catch (r) { return r; }
+  const role = await requireMember(tripId, u.id).catch(r => r);
+  if (role instanceof Response) return role;
+  if (!canContribute(role))
+    return NextResponse.json({ error: "Viewers can look but not add." }, { status: 403 });
 
   let finalText = String(text || "").slice(0, 20000);
   const [s] = await q(
@@ -30,5 +34,6 @@ export async function POST(req) {
     await q(
       `UPDATE photos SET entry_id=$1 WHERE id = ANY($2) AND trip_id=$3 AND user_id=$4`,
       [entry.id, photoIds, tripId, u.id]);
+  emitTrip(tripId);
   return NextResponse.json({ id: entry.id, placeName: place });
 }

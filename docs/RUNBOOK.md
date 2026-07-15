@@ -234,9 +234,12 @@ openssl rand -hex 16   # POSTGRES_PASSWORD
 | ANTHROPIC_API_KEY | provided key (`sk-ant-...`) |
 | AWS_ACCESS_KEY_ID | from Phase 2 (the `tripbook-app` user, NOT anyone's personal key) |
 | AWS_SECRET_ACCESS_KEY | from Phase 2 |
+| ADMIN_EMAILS | site admin email(s), comma separated (pre-filled with the owner's) |
 
 Remove the trailing `# comment` text on the lines you fill; some parsers
-include trailing comments in values.
+include trailing comments in values. Keep the double quotes around the
+SES_FROM value (it contains angle brackets); do not add quotes to the
+other lines.
 
 Lock it down: `chmod 600 .env`
 
@@ -343,7 +346,19 @@ parts must pass.
     for both members, and if it was placed in the book, the page updates
     and the editor's History shows a restorable revision.
 
-All eighteen pass = deployment complete.
+### Part D: viewer role and live updates
+
+19. As the owner, Invite -> enter a third email -> role "Viewer" -> Send.
+    Sign in as that person on another device. They see the timeline and
+    gallery but: no capture bar, no note box, no Book link, no Upload
+    button, and a "following as a viewer" line instead.
+20. Live updates: with the viewer's timeline open, the owner adds a photo
+    and a note from the phone. Both appear on the viewer's screen within
+    a few seconds WITHOUT reloading the page.
+21. The viewer opens a gallery photo and taps Download original; the
+    full-resolution file downloads.
+
+All twenty-one pass = deployment complete.
 
 ## Troubleshooting
 
@@ -373,7 +388,7 @@ All eighteen pass = deployment complete.
 - [ ] SES status: production access OR list of verified family addresses
 - [ ] Confirmation that a backup object exists in s3://.../backups/
 - [ ] Confirmation that .env contains SETTINGS_SECRET and does NOT contain LLM_MOCK
-- [ ] Date/time of the passed acceptance test (all 18 steps: phone, laptop, gallery)
+- [ ] Date/time of the passed acceptance test (all 21 steps: phone, laptop, gallery, viewer)
 
 ## Day-2 reference
 

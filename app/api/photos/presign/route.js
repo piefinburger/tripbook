@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { q } from "@/lib/db";
-import { currentUser, requireMember } from "@/lib/auth";
+import { currentUser, requireMember, canContribute } from "@/lib/auth";
 import { presignPut } from "@/lib/s3";
 
 const IMAGE = /^image\/(jpeg|png|heic|heif|webp)$/;
@@ -11,7 +11,10 @@ export async function POST(req) {
   const u = await currentUser();
   if (!u) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { tripId, contentType, ts, lat, lng, kind, source, durationS } = await req.json();
-  try { await requireMember(tripId, u.id); } catch (r) { return r; }
+  const role = await requireMember(tripId, u.id).catch(r => r);
+  if (role instanceof Response) return role;
+  if (!canContribute(role))
+    return NextResponse.json({ error: "Viewers can look but not add. Ask the trip owner to make you a contributor." }, { status: 403 });
 
   const isVideo = kind === "video";
   if (isVideo ? !VIDEO.test(contentType || "") : !IMAGE.test(contentType || ""))

@@ -17,12 +17,16 @@ export default function TripView({ tripId }) {
   const [note, setNote] = useState("");
   const [attached, setAttached] = useState([]); // photoIds already uploaded, attached to next note
   const [busy, setBusy] = useState(false);
-  const [listening, setListening] = useState(false);
+  const [me, setMe] = useState(null);
+  const [myRole, setMyRole] = useState("member");
+  const [siteAdmin, setSiteAdmin] = useState(false);
+  const [editing, setEditing] = useState(null);      // entry id being edited
+  const [editText, setEditText] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("member");
   const [inviteMsg, setInviteMsg] = useState("");
   const [showInvite, setShowInvite] = useState(false);
   const fileRef = useRef(null);
-  const recRef = useRef(null);
 
   const loadTimeline = useCallback(async () => {
     const r = await fetch(`/api/trips/${tripId}/timeline${person ? `?person=${person}` : ""}`);
@@ -32,6 +36,8 @@ export default function TripView({ tripId }) {
   useEffect(() => {
     fetch(`/api/trips/${tripId}`).then(r => r.json()).then(d => {
       setTrip(d.trip); setMembers(d.members || []);
+      setMe(d.me); setSiteAdmin(!!d.siteAdmin);
+      setMyRole(d.trip?.my_role || "member");
     });
   }, [tripId]);
 
@@ -44,6 +50,41 @@ export default function TripView({ tripId }) {
     }, 30000);
     return () => clearInterval(poll);
   }, [loadTimeline]);
+
+  // Live updates: reload when anyone in the trip adds or changes something.
+  // EventSource reconnects on its own; the 30s poll above is the backstop.
+  useEffect(() => {
+    const es = new EventSource(`/api/trips/${tripId}/events`);
+    es.onmessage = (e) => {
+      try { if (JSON.parse(e.data).type === "update") loadTimeline(); } catch {}
+    };
+    return () => es.close();
+  }, [tripId, loadTimeline]);
+
+  const canModerate = myRole === "owner" || myRole === "admin" || siteAdmin;
+  const viewer = myRole === "viewer" && !siteAdmin;
+  const mine = (it) => Number(it.user_id) === Number(me);
+
+  async function saveEdit(entryId) {
+    const r = await fetch(`/api/entries/${entryId}`, { method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: editText }) });
+    if (!r.ok) { alert((await r.json()).error); return; }
+    setEditing(null); setEditText("");
+    loadTimeline();
+  }
+  async function deleteEntry(entryId) {
+    if (!confirm("Delete this note for everyone? Photos attached to it stay in the trip.")) return;
+    const r = await fetch(`/api/entries/${entryId}`, { method: "DELETE" });
+    if (!r.ok) { alert((await r.json()).error); return; }
+    loadTimeline();
+  }
+  async function deletePhoto(photoId) {
+    if (!confirm("Delete this photo for everyone? If it is in the book, it will be removed from those pages too.")) return;
+    const r = await fetch(`/api/photos/${photoId}`, { method: "DELETE" });
+    if (!r.ok) { alert((await r.json()).error); return; }
+    loadTimeline();
+  }
 
   async function onFiles(e) {
     const files = [...(e.target.files || [])];
@@ -94,32 +135,15 @@ export default function TripView({ tripId }) {
     setPending(await outboxCount());
   }
 
-  // Web Speech API: shown only when available; iOS keyboard dictation is the
-  // reliable fallback and works in the textarea regardless.
-  const speechAvailable = typeof window !== "undefined" &&
-    ("webkitSpeechRecognition" in window || "SpeechRecognition" in window);
-  function toggleSpeech() {
-    if (listening) { recRef.current?.stop(); return; }
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const rec = new SR();
-    rec.continuous = true; rec.interimResults = false;
-    rec.onresult = (e) => {
-      const chunk = [...e.results].slice(e.resultIndex).map(r => r[0].transcript).join(" ");
-      setNote(n => (n ? n + " " : "") + chunk.trim());
-    };
-    rec.onend = () => setListening(false);
-    rec.onerror = () => setListening(false);
-    recRef.current = rec;
-    setListening(true);
-    rec.start();
-  }
+  // Dictation: iOS keyboard mic works in the textarea; the in-app Web Speech
+  // button was removed (unreliable on iOS Safari, redundant with the keyboard).
 
   async function sendInvite() {
     setInviteMsg("");
     const r = await fetch(`/api/trips/${tripId}/invite`, { method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: inviteEmail }) });
-    setInviteMsg(r.ok ? `Invite sent to ${inviteEmail}.` : (await r.json()).error);
+      body: JSON.stringify({ email: inviteEmail, role: inviteRole }) });
+    setInviteMsg(r.ok ? `${inviteRole === "viewer" ? "Viewer" : "Contributor"} invite sent to ${inviteEmail}.` : (await r.json()).error);
     if (r.ok) setInviteEmail("");
   }
 
@@ -138,7 +162,10 @@ export default function TripView({ tripId }) {
         <span className="brand">{trip?.name || ""}</span>
         <span className="row" style={{ gap: 12 }}>
           <Link href={`/trip/${tripId}/gallery`} style={{ color: "#cfe3ec" }}>Gallery</Link>
-          <Link href={`/trip/${tripId}/book`} style={{ color: "#f2b441", fontWeight: 700 }}>Book</Link>
+          {(myRole === "owner" || myRole === "admin" || siteAdmin) &&
+            <Link href={`/trip/${tripId}/settings`} style={{ color: "#cfe3ec" }}>Settings</Link>}
+          {myRole !== "viewer" &&
+            <Link href={`/trip/${tripId}/book`} style={{ color: "#f2b441", fontWeight: 700 }}>Book</Link>}
         </span>
       </div>
       {pending > 0 && <div className="sync-chip" role="status">
@@ -151,7 +178,8 @@ export default function TripView({ tripId }) {
             <option value="">Everyone</option>
             {members.map(m => <option key={m.id} value={m.id}>{m.name || m.email}</option>)}
           </select>
-          <button className="small secondary" onClick={() => setShowInvite(s => !s)}>Invite</button>
+          {myRole !== "viewer" &&
+            <button className="small secondary" onClick={() => setShowInvite(s => !s)}>Invite</button>}
         </div>
 
         {showInvite && (
@@ -168,6 +196,13 @@ export default function TripView({ tripId }) {
             <div className="row">
               <input id="invemail" type="email" value={inviteEmail}
                 onChange={e => setInviteEmail(e.target.value)} placeholder="grandma@example.com" />
+            </div>
+            <div className="row" style={{ marginTop: 6 }}>
+              <select value={inviteRole} onChange={e => setInviteRole(e.target.value)}
+                aria-label="Invite role" style={{ width: "auto" }}>
+                <option value="member">Contributor: adds photos and notes</option>
+                <option value="viewer">Viewer: watches live, adds nothing</option>
+              </select>
               <button className="small" onClick={sendInvite} disabled={!inviteEmail}>Send</button>
             </div>
             {inviteMsg && <p className="muted">{inviteMsg}</p>}
@@ -186,20 +221,52 @@ export default function TripView({ tripId }) {
                 <div className="avatar" aria-hidden>{initials(it.author)}</div>
                 <div className="bubble">
                   {it.type === "entry" ? (
-                    <>
-                      {it.text && <div>{it.text}</div>}
-                      {it.photos?.length > 0 && (
-                        <div className="photo-grid">
-                          {it.photos.map(p => <img key={p.id} src={p.url} alt="" loading="lazy" />)}
+                    editing === it.id ? (
+                      <>
+                        <textarea rows={3} value={editText} autoFocus
+                          onChange={e => setEditText(e.target.value)} />
+                        <div className="row" style={{ marginTop: 6 }}>
+                          <button className="small" onClick={() => saveEdit(it.id)}
+                            disabled={!editText.trim()}>Save</button>
+                          <button className="small secondary"
+                            onClick={() => { setEditing(null); setEditText(""); }}>Cancel</button>
                         </div>
-                      )}
-                    </>
+                      </>
+                    ) : (
+                      <>
+                        {it.text && <div>{it.text}</div>}
+                        {it.photos?.length > 0 && (
+                          <div className="photo-grid">
+                            {it.photos.map(p => (
+                              <span key={p.id} className="pwrap">
+                                <img src={p.url} alt="" loading="lazy" />
+                                {(mine(p) || canModerate) &&
+                                  <button className="pdel" aria-label="Delete photo"
+                                    onClick={() => deletePhoto(p.id)}>&times;</button>}
+                              </span>))}
+                          </div>
+                        )}
+                      </>
+                    )
                   ) : (
-                    <img src={it.url} alt="" loading="lazy" />
+                    <span className="pwrap">
+                      <img src={it.url} alt="" loading="lazy" />
+                      {(mine(it) || canModerate) &&
+                        <button className="pdel" aria-label="Delete photo"
+                          onClick={() => deletePhoto(it.id)}>&times;</button>}
+                    </span>
                   )}
                   <div className="meta">
                     {it.author} &middot; {new Date(it.ts).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
                     {it.place_name ? <> &middot; {it.place_name}</> : null}
+                    {it.type === "entry" && editing !== it.id && (mine(it) || canModerate) && (
+                      <span className="act-links">
+                        <a role="button" tabIndex={0}
+                          onClick={() => { setEditing(it.id); setEditText(it.text || ""); }}>Edit</a>
+                        <a role="button" tabIndex={0}
+                          onClick={() => deleteEntry(it.id)}>Delete</a>
+                      </span>
+                    )}
                   </div>
                 </div>
               </article>
@@ -207,29 +274,28 @@ export default function TripView({ tripId }) {
           </section>
         ))}
 
-        <div className="card" style={{ marginTop: 16 }}>
+        {viewer && (
+          <p className="muted" style={{ textAlign: "center", margin: "14px 0" }}>
+            You are following this trip as a viewer. New photos and notes
+            appear here live.</p>
+        )}
+        {!viewer && <div className="card" style={{ marginTop: 16 }}>
           <label htmlFor="note">Add a note{attached.length ? ` (${attached.length} photo${attached.length > 1 ? "s" : ""} attached)` : ""}</label>
           <textarea id="note" rows={3} value={note} onChange={e => setNote(e.target.value)}
             placeholder="What happened? Tip: the mic on your keyboard works great here." />
           <div className="row" style={{ marginTop: 8 }}>
             <button onClick={saveNote} disabled={!note.trim() && !attached.length}>Save note</button>
-            {speechAvailable && (
-              <button className={listening ? "" : "secondary"} onClick={toggleSpeech}
-                aria-pressed={listening}>
-                {listening ? "Stop dictating" : "Dictate"}
-              </button>
-            )}
           </div>
-        </div>
+        </div>}
       </main>
 
-      <div className="capture-bar">
+      {!viewer && <div className="capture-bar">
         <button onClick={() => fileRef.current?.click()} disabled={busy}>
           {busy ? "Adding..." : "Add photos"}
         </button>
         <input ref={fileRef} type="file" accept="image/*" capture="environment"
           multiple hidden onChange={onFiles} />
-      </div>
+      </div>}
     </>
   );
 }

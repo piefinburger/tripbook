@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Nightly Postgres dump to S3. Cron-installed by server-setup.sh.
 set -euo pipefail
-cd "$(dirname "$0")/.." # Read only the vars we need from .env; never `source` it (values like#
+cd "$(dirname "$0")/.."
+# Read only the vars we need from .env; never `source` it (values like
 # SES_FROM contain <angle brackets> that bash would treat as redirects).
 envval() { grep -E "^$1=" .env | head -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//'; }
 AWS_ACCESS_KEY_ID=$(envval AWS_ACCESS_KEY_ID)

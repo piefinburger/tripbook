@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { q } from "@/lib/db";
-import { currentUser, requireMember } from "@/lib/auth";
+import { currentUser, requireMember, canContribute } from "@/lib/auth";
 import { presignGet } from "@/lib/s3";
 import { getOrNullDraft } from "@/lib/book";
 import { ensureV2 } from "@/lib/specops";
@@ -12,7 +12,8 @@ export const dynamic = "force-dynamic";
 export default async function DraftPreview({ params }) {
   const u = await currentUser();
   if (!u) redirect("/login");
-  await requireMember(params.tripId, u.id);
+  const role = await requireMember(params.tripId, u.id);
+  if (!canContribute(role)) redirect(`/trip/${params.tripId}`);
   const draft = await getOrNullDraft(params.tripId);
   if (!draft?.spec?.chapters) return <main><p>Nothing to preview yet.</p></main>;
   const photos = await q(

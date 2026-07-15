@@ -209,3 +209,13 @@ main.wide { max-width: 1280px; }
 .lb-actions button { width: auto; padding: 9px 13px; font-size: 0.85rem;
   background: rgba(255,255,255,0.12); color: #fff; }
 .lb-actions button.warn { background: rgba(199,84,55,0.85); }
+
+/* ---- Timeline edit/delete controls ---- */
+.pwrap { position: relative; display: inline-block; }
+.pdel { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px;
+  padding: 0; border-radius: 50%; background: rgba(20,52,59,0.75); color: #fff;
+  font-size: 1rem; line-height: 1; display: flex; align-items: center;
+  justify-content: center; }
+.act-links { margin-left: 8px; }
+.act-links a { color: var(--tide); font-size: 0.78rem; font-weight: 600;
+  margin-right: 10px; cursor: pointer; }
