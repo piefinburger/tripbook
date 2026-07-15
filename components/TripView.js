@@ -22,6 +22,10 @@ export default function TripView({ tripId }) {
   const [siteAdmin, setSiteAdmin] = useState(false);
   const [editing, setEditing] = useState(null);      // entry id being edited
   const [editText, setEditText] = useState("");
+  const [lb, setLb] = useState(null);                 // {list:[photo], i} lightbox
+  const [selecting, setSelecting] = useState(false);  // group-photos mode
+  const [selected, setSelected] = useState([]);       // photoIds picked for grouping
+  const [groupMeta, setGroupMeta] = useState(null);   // {ts,lat,lng} carried onto the note
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
   const [inviteMsg, setInviteMsg] = useState("");
@@ -64,6 +68,28 @@ export default function TripView({ tripId }) {
   const canModerate = myRole === "owner" || myRole === "admin" || siteAdmin;
   const viewer = myRole === "viewer" && !siteAdmin;
   const mine = (it) => Number(it.user_id) === Number(me);
+
+  function openLb(list, id) {
+    const i = list.findIndex(p => Number(p.id) === Number(id));
+    if (i >= 0) setLb({ list, i });
+  }
+  function toggleSel(photoId) {
+    setSelected(sel => sel.includes(photoId)
+      ? sel.filter(x => x !== photoId) : [...sel, photoId]);
+  }
+  function annotateSelection(loosePhotos) {
+    const chosen = loosePhotos.filter(p => selected.includes(Number(p.id)));
+    if (!chosen.length) return;
+    const first = [...chosen].sort((a, b) => new Date(a.ts) - new Date(b.ts))[0];
+    setAttached(selected);
+    setGroupMeta({ ts: first.ts, lat: first.lat ?? null, lng: first.lng ?? null });
+    setSelecting(false); setSelected([]);
+    setTimeout(() => document.getElementById("note")?.focus(), 50);
+  }
+  async function downloadOriginal(id) {
+    const j = await fetch(`/api/photos/${id}`).then(r => r.json());
+    if (j.url) window.location.href = j.url;
+  }
 
   async function saveEdit(entryId) {
     const r = await fetch(`/api/entries/${entryId}`, { method: "PUT",
@@ -127,10 +153,10 @@ export default function TripView({ tripId }) {
   async function saveNote() {
     const payload = {
       tripId: Number(tripId), clientId: crypto.randomUUID(),
-      ts: new Date().toISOString(), text: note, photoIds: attached,
-      ...(await getPosition())
+      ts: groupMeta?.ts || new Date().toISOString(), text: note, photoIds: attached,
+      ...(groupMeta ? { lat: groupMeta.lat, lng: groupMeta.lng } : await getPosition())
     };
-    setNote(""); setAttached([]);
+    setNote(""); setAttached([]); setGroupMeta(null);
     if (navigator.onLine) {
       const r = await fetch("/api/entries", { method: "POST",
         headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
@@ -187,6 +213,10 @@ export default function TripView({ tripId }) {
           </select>
           {myRole !== "viewer" &&
             <button className="small secondary" onClick={() => setShowInvite(s => !s)}>Invite</button>}
+          {myRole !== "viewer" &&
+            <button className="small secondary"
+              onClick={() => { setSelecting(v => !v); setSelected([]); }}>
+              {selecting ? "Cancel" : "Group"}</button>}
         </div>
 
         {showInvite && (
@@ -245,22 +275,28 @@ export default function TripView({ tripId }) {
                         {it.photos?.length > 0 && (
                           <div className="photo-grid">
                             {it.photos.map(p => (
-                              <span key={p.id} className="pwrap">
+                              <span key={p.id} className="pwrap"
+                                onClick={() => openLb(it.photos, p.id)}>
                                 <img src={p.url} alt="" loading="lazy" />
                                 {(mine(p) || canModerate) &&
                                   <button className="pdel" aria-label="Delete photo"
-                                    onClick={() => deletePhoto(p.id)}>&times;</button>}
+                                    onClick={e => { e.stopPropagation(); deletePhoto(p.id); }}>&times;</button>}
                               </span>))}
                           </div>
                         )}
                       </>
                     )
                   ) : (
-                    <span className="pwrap">
+                    <span className={`pwrap ${selecting && selected.includes(Number(it.id)) ? "psel" : ""} ${selecting && !mine(it) ? "pdim" : ""}`}
+                      onClick={() => selecting
+                        ? (mine(it) && toggleSel(Number(it.id)))
+                        : openLb(d.items.filter(x => x.type === "photo"), it.id)}>
                       <img src={it.url} alt="" loading="lazy" />
-                      {(mine(it) || canModerate) &&
+                      {selecting && selected.includes(Number(it.id)) &&
+                        <span className="pcheck">&#10003;</span>}
+                      {!selecting && (mine(it) || canModerate) &&
                         <button className="pdel" aria-label="Delete photo"
-                          onClick={() => deletePhoto(it.id)}>&times;</button>}
+                          onClick={e => { e.stopPropagation(); deletePhoto(it.id); }}>&times;</button>}
                     </span>
                   )}
                   <div className="meta">
@@ -296,6 +332,34 @@ export default function TripView({ tripId }) {
         </div>}
       </main>
 
+      {selecting && (
+        <div className="grp-bar">
+          {selected.length === 0
+            ? <span>Tap your loose photos to select them, then annotate.</span>
+            : <button onClick={() => {
+                const loose = items.filter(x => x.type === "photo");
+                annotateSelection(loose);
+              }}>Annotate {selected.length} photo{selected.length > 1 ? "s" : ""} with a note</button>}
+        </div>
+      )}
+      {lb && (
+        <div className="lightbox" onClick={() => setLb(null)}>
+          <div className="lb-body" onClick={e => e.stopPropagation()}>
+            <img src={lb.list[lb.i].url} alt="" />
+            <div className="lb-meta">
+              <b>{lb.list[lb.i].author}</b>
+              <span>{new Date(lb.list[lb.i].ts).toLocaleString()}</span>
+              <span>{lb.list[lb.i].place_name || ""}</span>
+            </div>
+            <div className="lb-actions">
+              {lb.i > 0 && <button onClick={() => setLb({ ...lb, i: lb.i - 1 })}>&larr; Prev</button>}
+              {lb.i < lb.list.length - 1 && <button onClick={() => setLb({ ...lb, i: lb.i + 1 })}>Next &rarr;</button>}
+              <button onClick={() => downloadOriginal(lb.list[lb.i].id)}>Download</button>
+              <button onClick={() => setLb(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
       {!viewer && <div className="capture-bar">
         <button onClick={() => fileRef.current?.click()} disabled={busy}>
           {busy ? "Adding..." : "Add photos"}
