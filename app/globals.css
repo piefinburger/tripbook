@@ -242,3 +242,6 @@ main.wide { max-width: 1280px; }
   display: flex; justify-content: center; font-size: 0.9rem; }
 .grp-bar button { width: auto; background: var(--tag); color: var(--ink);
   font-weight: 700; padding: 10px 16px; }
+
+/* timeline photos keep a tappable footprint while loading or broken */
+.pwrap img { min-height: 120px; object-fit: cover; }
