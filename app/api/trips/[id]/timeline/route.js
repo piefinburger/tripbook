@@ -28,6 +28,6 @@ export async function GET(req, { params }) {
   const items = [
     ...entries.map(e => ({ type: "entry", ts: e.ts, ...e, photos: byEntry[e.id] || [] })),
     ...photos.filter(p => !p.entry_id).map(p => ({ type: "photo", ts: p.ts, ...p }))
-  ].sort((a, b) => new Date(a.ts) - new Date(b.ts));
+  ].sort((a, b) => new Date(b.ts) - new Date(a.ts)); // newest first, top of screen
   return NextResponse.json({ items });
 }
