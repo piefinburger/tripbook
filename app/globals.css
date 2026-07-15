@@ -71,7 +71,8 @@ label { display: block; font-size: 0.85rem; color: var(--ink-soft); margin: 12px
   border-radius: var(--radius); padding: 10px 12px; }
 .meta { font-size: 0.75rem; color: var(--ink-soft); margin-top: 6px; }
 .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; margin-top: 8px; }
-.photo-grid img, .bubble > img { width: 100%; border-radius: 8px; display: block; background: var(--line); }
+.photo-grid img, .bubble > img, .pwrap img { width: 100%; border-radius: 8px; display: block; background: var(--line); }
+.pwrap { display: block; width: 100%; }
 
 .capture-bar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
