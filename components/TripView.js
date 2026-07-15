@@ -91,6 +91,7 @@ export default function TripView({ tripId }) {
     e.target.value = "";
     if (!files.length) return;
     setBusy(true);
+    try {
     const pos = await getPosition();
     for (const f of files) {
       const blob = await compressImage(f);
@@ -115,8 +116,12 @@ export default function TripView({ tripId }) {
       await queueItem({ kind: "photo", meta, blob });
       setPending(await outboxCount());
     }
-    setBusy(false);
-    loadTimeline();
+    } catch (err) {
+      alert("Could not add that photo: " + (err?.message || err));
+    } finally {
+      setBusy(false);
+      loadTimeline();
+    }
   }
 
   async function saveNote() {
