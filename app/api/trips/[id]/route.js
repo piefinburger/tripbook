@@ -14,9 +14,14 @@ export async function GET(_req, { params }) {
      WHERE t.id=$1`, [params.id, u.id]);
   if (!trip) return NextResponse.json({ error: "Trip not found." }, { status: 404 });
   const members = await q(
-    `SELECT u.id, u.name, u.email, m.role FROM trip_members m
+    `SELECT u.id, u.name, u.email, m.role, u.last_active_at FROM trip_members m
      JOIN users u ON u.id=m.user_id WHERE m.trip_id=$1`, [params.id]);
-  return NextResponse.json({ trip, members,
+  const canManage = trip.my_role === "owner" || trip.my_role === "admin" || isSiteAdmin(u);
+  const pendingInvites = canManage ? await q(
+    `SELECT email, invite_role, expires_at FROM login_tokens
+     WHERE invite_trip_id=$1 AND used_at IS NULL AND expires_at > now()
+     ORDER BY expires_at DESC`, [params.id]) : [];
+  return NextResponse.json({ trip, members, pendingInvites,
     me: Number(u.id), siteAdmin: isSiteAdmin(u) });
 }
 

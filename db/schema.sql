@@ -136,3 +136,6 @@ ALTER TABLE trip_members DROP CONSTRAINT IF EXISTS trip_members_role_check;
 ALTER TABLE trip_members ADD CONSTRAINT trip_members_role_check
   CHECK (role IN ('owner','admin','member','viewer'));
 ALTER TABLE login_tokens ADD COLUMN IF NOT EXISTS invite_role TEXT DEFAULT 'member';
+
+-- Last-active tracking for the Trip Settings member list
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMPTZ;
