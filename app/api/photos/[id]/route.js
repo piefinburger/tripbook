@@ -27,7 +27,8 @@ export async function GET(_req, { params }) {
   return NextResponse.json({ url });
 }
 
-// Set place (typed name, forward geocoded best-effort).
+// PATCH handles two edits: setting a place name, or ungrouping the photo
+// from its note (entry) so it returns to the timeline as a loose photo.
 export async function PATCH(req, { params }) {
   const u = await currentUser();
   if (!u) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -35,7 +36,24 @@ export async function PATCH(req, { params }) {
   if (err) return err;
   if (!p.canModify)
     return NextResponse.json({ error: "Only the uploader or a trip admin can edit this." }, { status: 403 });
-  const { placeName } = await req.json();
+  const body = await req.json();
+
+  if (body.ungroup) {
+    if (!p.entry_id)
+      return NextResponse.json({ error: "This photo is not part of a note." }, { status: 400 });
+    await q("UPDATE photos SET entry_id=NULL WHERE id=$1", [p.id]);
+    // If the note is now an empty husk (no text, no photos), remove it.
+    const [e] = await q(
+      `SELECT e.id, e.text,
+              (SELECT count(*) FROM photos WHERE entry_id=e.id) AS n
+       FROM entries e WHERE e.id=$1`, [p.entry_id]);
+    if (e && Number(e.n) === 0 && !(e.text || "").trim())
+      await q("DELETE FROM entries WHERE id=$1", [e.id]);
+    emitTrip(p.trip_id);
+    return NextResponse.json({ ok: true, entryRemoved: e ? Number(e.n) === 0 && !(e.text || "").trim() : false });
+  }
+
+  const { placeName } = body;
   const text = String(placeName || "").trim().slice(0, 120);
   if (!text) return NextResponse.json({ error: "Type a place name." }, { status: 400 });
   const hit = await searchPlace(text);

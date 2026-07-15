@@ -26,6 +26,7 @@ export default function TripView({ tripId }) {
   const [selecting, setSelecting] = useState(false);  // group-photos mode
   const [selected, setSelected] = useState([]);       // photoIds picked for grouping
   const [groupMeta, setGroupMeta] = useState(null);   // {ts,lat,lng} carried onto the note
+  const [photoMenu, setPhotoMenu] = useState(null);    // photoId: ungroup-or-delete sheet
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
   const [inviteMsg, setInviteMsg] = useState("");
@@ -102,6 +103,14 @@ export default function TripView({ tripId }) {
   async function deleteEntry(entryId) {
     if (!confirm("Delete this note for everyone? Photos attached to it stay in the trip.")) return;
     const r = await fetch(`/api/entries/${entryId}`, { method: "DELETE" });
+    if (!r.ok) { alert((await r.json()).error); return; }
+    loadTimeline();
+  }
+  async function ungroupPhoto(photoId) {
+    setPhotoMenu(null);
+    const r = await fetch(`/api/photos/${photoId}`, { method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ungroup: true }) });
     if (!r.ok) { alert((await r.json()).error); return; }
     loadTimeline();
   }
@@ -279,8 +288,8 @@ export default function TripView({ tripId }) {
                                 onClick={() => openLb(it.photos, p.id)}>
                                 <img src={p.url} alt="" loading="lazy" />
                                 {(mine(p) || canModerate) &&
-                                  <button className="pdel" aria-label="Delete photo"
-                                    onClick={e => { e.stopPropagation(); deletePhoto(p.id); }}>&times;</button>}
+                                  <button className="pdel" aria-label="Photo options"
+                                    onClick={e => { e.stopPropagation(); setPhotoMenu(Number(p.id)); }}>&times;</button>}
                               </span>))}
                           </div>
                         )}
@@ -340,6 +349,18 @@ export default function TripView({ tripId }) {
                 const loose = items.filter(x => x.type === "photo");
                 annotateSelection(loose);
               }}>Annotate {selected.length} photo{selected.length > 1 ? "s" : ""} with a note</button>}
+        </div>
+      )}
+      {photoMenu && (
+        <div className="lightbox" onClick={() => setPhotoMenu(null)}>
+          <div className="pm-sheet" onClick={e => e.stopPropagation()}>
+            <b>This photo is part of a note</b>
+            <button onClick={() => ungroupPhoto(photoMenu)}>
+              Ungroup: back to the timeline on its own</button>
+            <button className="danger" onClick={() => { const id = photoMenu; setPhotoMenu(null); deletePhoto(id); }}>
+              Delete: remove from the trip for everyone</button>
+            <button className="ghost" onClick={() => setPhotoMenu(null)}>Cancel</button>
+          </div>
         </div>
       )}
       {lb && (
