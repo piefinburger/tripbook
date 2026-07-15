@@ -27,6 +27,7 @@ export default function TripView({ tripId }) {
   const [selected, setSelected] = useState([]);       // photoIds picked for grouping
   const [groupMeta, setGroupMeta] = useState(null);   // {ts,lat,lng} carried onto the note
   const [photoMenu, setPhotoMenu] = useState(null);    // photoId: ungroup-or-delete sheet
+  const [pickingNote, setPickingNote] = useState(false); // choosing a note to add selection to
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
   const [inviteMsg, setInviteMsg] = useState("");
@@ -77,6 +78,15 @@ export default function TripView({ tripId }) {
   function toggleSel(photoId) {
     setSelected(sel => sel.includes(photoId)
       ? sel.filter(x => x !== photoId) : [...sel, photoId]);
+  }
+  async function addSelectionToNote(entryId) {
+    const ids = [...selected];
+    setPickingNote(false); setSelecting(false); setSelected([]);
+    const r = await fetch(`/api/entries/${entryId}/photos`, { method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ photoIds: ids }) });
+    if (!r.ok) { alert((await r.json()).error); return; }
+    loadTimeline();
   }
   function annotateSelection(loosePhotos) {
     const chosen = loosePhotos.filter(p => selected.includes(Number(p.id)));
@@ -224,7 +234,7 @@ export default function TripView({ tripId }) {
             <button className="small secondary" onClick={() => setShowInvite(s => !s)}>Invite</button>}
           {myRole !== "viewer" &&
             <button className="small secondary"
-              onClick={() => { setSelecting(v => !v); setSelected([]); }}>
+              onClick={() => { setSelecting(v => !v); setSelected([]); setPickingNote(false); }}>
               {selecting ? "Cancel" : "Group"}</button>}
         </div>
 
@@ -265,7 +275,9 @@ export default function TripView({ tripId }) {
             {d.items.map(it => (
               <article key={`${it.type}-${it.id}`} className="feed-item">
                 <div className="avatar" aria-hidden>{initials(it.author)}</div>
-                <div className="bubble">
+                <div className={`bubble ${pickingNote && it.type === "entry" ? "pick-target" : ""}`}
+                  onClick={pickingNote && it.type === "entry"
+                    ? () => addSelectionToNote(it.id) : undefined}>
                   {it.type === "entry" ? (
                     editing === it.id ? (
                       <>
@@ -343,12 +355,18 @@ export default function TripView({ tripId }) {
 
       {selecting && (
         <div className="grp-bar">
-          {selected.length === 0
-            ? <span>Tap your loose photos to select them, then annotate.</span>
-            : <button onClick={() => {
-                const loose = items.filter(x => x.type === "photo");
-                annotateSelection(loose);
-              }}>Annotate {selected.length} photo{selected.length > 1 ? "s" : ""} with a note</button>}
+          {pickingNote
+            ? <span>Now tap the note to add {selected.length} photo{selected.length > 1 ? "s" : ""} to.
+                <button className="ghost" onClick={() => setPickingNote(false)}>Back</button></span>
+            : selected.length === 0
+            ? <span>Tap your loose photos to select them.</span>
+            : <>
+                <button onClick={() => {
+                  const loose = items.filter(x => x.type === "photo");
+                  annotateSelection(loose);
+                }}>New note</button>
+                <button onClick={() => setPickingNote(true)}>Add to a note</button>
+              </>}
         </div>
       )}
       {photoMenu && (
