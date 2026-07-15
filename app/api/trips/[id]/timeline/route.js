@@ -15,7 +15,7 @@ export async function GET(req, { params }) {
      WHERE e.trip_id=$1 ${person ? "AND e.user_id=$2" : ""} ORDER BY e.ts`,
     person ? [params.id, person] : [params.id]);
   const photos = await q(
-    `SELECT p.id, p.ts, p.place_name, p.entry_id, p.user_id, p.preview_key,
+    `SELECT p.id, p.ts, p.place_name, p.entry_id, p.user_id, p.preview_key, p.lat, p.lng,
             p.width, p.height, u.name AS author
      FROM photos p JOIN users u ON u.id=p.user_id
      WHERE p.trip_id=$1 AND p.status='ready' AND p.kind='photo' ${person ? "AND p.user_id=$2" : ""}

@@ -229,3 +229,16 @@ main.wide { max-width: 1280px; }
   color: #fff; margin-top: 4px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+
+/* ---- Photo grouping + timeline lightbox ---- */
+.pwrap { cursor: pointer; }
+.pwrap.psel img { outline: 3px solid var(--tide); outline-offset: -3px; border-radius: 8px; }
+.pwrap.pdim { opacity: 0.4; pointer-events: none; }
+.pcheck { position: absolute; top: 6px; left: 6px; width: 24px; height: 24px;
+  border-radius: 50%; background: var(--tide); color: #fff; font-size: 0.85rem;
+  display: flex; align-items: center; justify-content: center; font-weight: 700; }
+.grp-bar { position: fixed; left: 0; right: 0; bottom: calc(64px + env(safe-area-inset-bottom));
+  z-index: 25; background: var(--ink); color: #fff; padding: 10px 16px;
+  display: flex; justify-content: center; font-size: 0.9rem; }
+.grp-bar button { width: auto; background: var(--tag); color: var(--ink);
+  font-weight: 700; padding: 10px 16px; }
