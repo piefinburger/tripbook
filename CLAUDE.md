@@ -12,6 +12,11 @@ Media in S3 (originals/ + previews/), email via SES, AI via Anthropic
   (IF NOT EXISTS / DROP CONSTRAINT IF EXISTS + ADD). Never DROP TABLE,
   never DROP COLUMN, never rewrite data in schema.sql. Data lives in the
   compose named volume `dbdata`; nothing in a deploy may touch it.
+  To WIDEN a constraint or enum: EDIT the existing statement in place;
+  never append a second drop/recreate of the same constraint. schema.sql
+  is a document describing the current schema, not a migration log; a
+  stale narrower copy re-applies on every boot and will reject live rows
+  (this took production down once).
 - Permission model (enforce SERVER-SIDE in every new route):
   roles per trip: owner > admin > member > viewer.
   viewer = read timeline/gallery + download originals ONLY; 403 on all

@@ -127,10 +127,9 @@ ALTER TABLE photos ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'captur
   CHECK (source IN ('capture','library'));
 ALTER TABLE photos ADD COLUMN IF NOT EXISTS duration_s INT;
 
--- Trip-level admins (owner-granted moderators) + site admin support
-ALTER TABLE trip_members DROP CONSTRAINT IF EXISTS trip_members_role_check;
-ALTER TABLE trip_members ADD CONSTRAINT trip_members_role_check
-  CHECK (role IN ('owner','admin','member'));
+-- Trip roles: constraint is defined ONCE below (viewer block). Never add a
+-- second drop/recreate of the same constraint: schema.sql re-applies in full
+-- on every boot, and a stale narrower version will reject live rows.
 
 -- Viewer role (read-only family members, e.g. grandparents)
 ALTER TABLE trip_members DROP CONSTRAINT IF EXISTS trip_members_role_check;

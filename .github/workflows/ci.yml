@@ -30,4 +30,13 @@ jobs:
             sleep 1
           done
           DATABASE_URL=postgres://tripbook:ci@127.0.0.1:5432/tripbook node db/migrate.mjs
+          # Seed rows that exercise the NEWEST enum/constraint values, then
+          # re-apply. Catches stale constraint definitions that only fail
+          # against live data (empty-DB idempotency is not enough).
+          PGPASSWORD=ci psql -h 127.0.0.1 -U tripbook -d tripbook -c "
+            INSERT INTO users (email,name) VALUES ('ci@x','CI');
+            INSERT INTO trips (name,owner_id,invite_code) VALUES ('ci',1,'ci1');
+            INSERT INTO trip_members (trip_id,user_id,role) VALUES (1,1,'viewer');
+            INSERT INTO photos (trip_id,user_id,s3_key,ts,status,kind,source)
+              VALUES (1,1,'o/ci',now(),'ready','video','library');"
           DATABASE_URL=postgres://tripbook:ci@127.0.0.1:5432/tripbook node db/migrate.mjs
