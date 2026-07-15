@@ -16,9 +16,13 @@ echo "==> Rebuilding and restarting (db volume untouched)"
 docker compose up -d --build
 
 echo "==> Waiting for health"
+# Probe from INSIDE the app container: port 3000 is not published to the
+# host (only Caddy is), and the slim image has no curl/wget - but it
+# definitely has node, and node 22 has fetch built in.
 for i in $(seq 1 30); do
-  if curl -fsS http://localhost:3000/api/health > /dev/null 2>&1 \
-     || docker compose exec -T app wget -qO- http://localhost:3000/api/health > /dev/null 2>&1; then
+  if docker compose exec -T app node -e \
+    "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" \
+    > /dev/null 2>&1; then
     echo "==> Healthy. Deploy complete: $(git rev-parse --short HEAD)"
     docker image prune -f > /dev/null
     exit 0
