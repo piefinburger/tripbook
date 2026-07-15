@@ -1,23 +1,26 @@
 import { NextResponse } from "next/server";
 import { q } from "@/lib/db";
-import { currentUser, requireMember } from "@/lib/auth";
+import { currentUser, requireMember, canModerate, isSiteAdmin } from "@/lib/auth";
 import { deleteObject, presignGet } from "@/lib/s3";
 import { getOrNullDraft } from "@/lib/book";
 import { searchPlace } from "@/lib/geocode";
+import { emitTrip } from "@/lib/events";
 
-async function loadPhoto(id, userId) {
+async function loadPhoto(id, user) {
   const [p] = await q("SELECT * FROM photos WHERE id=$1", [id]);
   if (!p) return [null, NextResponse.json({ error: "Not found." }, { status: 404 })];
-  const role = await requireMember(p.trip_id, userId).catch(r => r);
-  if (role instanceof Response) return [null, role];
-  return [{ ...p, role }, null];
+  const role = await requireMember(p.trip_id, user.id).catch(r => r);
+  if (role instanceof Response && !isSiteAdmin(user)) return [null, role];
+  const tripRole = role instanceof Response ? null : role;
+  return [{ ...p, role: tripRole,
+    canModify: canModerate(tripRole, user) || Number(p.user_id) === Number(user.id) }, null];
 }
 
 // Download original: presigned GET with attachment disposition.
 export async function GET(_req, { params }) {
   const u = await currentUser();
   if (!u) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const [p, err] = await loadPhoto(params.id, u.id);
+  const [p, err] = await loadPhoto(params.id, u);
   if (err) return err;
   const url = await presignGet(p.s3_key, {
     download: p.s3_key.split("/").pop() });
@@ -28,16 +31,17 @@ export async function GET(_req, { params }) {
 export async function PATCH(req, { params }) {
   const u = await currentUser();
   if (!u) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const [p, err] = await loadPhoto(params.id, u.id);
+  const [p, err] = await loadPhoto(params.id, u);
   if (err) return err;
-  if (p.role !== "owner" && Number(p.user_id) !== Number(u.id))
-    return NextResponse.json({ error: "Only the uploader or trip owner can edit this." }, { status: 403 });
+  if (!p.canModify)
+    return NextResponse.json({ error: "Only the uploader or a trip admin can edit this." }, { status: 403 });
   const { placeName } = await req.json();
   const text = String(placeName || "").trim().slice(0, 120);
   if (!text) return NextResponse.json({ error: "Type a place name." }, { status: 400 });
   const hit = await searchPlace(text);
   await q("UPDATE photos SET place_name=$2, lat=COALESCE($3,lat), lng=COALESCE($4,lng) WHERE id=$1",
     [params.id, hit?.name || text, hit?.lat ?? null, hit?.lng ?? null]);
+  emitTrip(p.trip_id);
   return NextResponse.json({ ok: true, placeName: hit?.name || text });
 }
 
@@ -46,10 +50,10 @@ export async function PATCH(req, { params }) {
 export async function DELETE(_req, { params }) {
   const u = await currentUser();
   if (!u) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const [p, err] = await loadPhoto(params.id, u.id);
+  const [p, err] = await loadPhoto(params.id, u);
   if (err) return err;
-  if (p.role !== "owner" && Number(p.user_id) !== Number(u.id))
-    return NextResponse.json({ error: "Only the uploader or trip owner can delete this." }, { status: 403 });
+  if (!p.canModify)
+    return NextResponse.json({ error: "Only the uploader or a trip admin can delete this." }, { status: 403 });
 
   const draft = await getOrNullDraft(p.trip_id);
   if (draft?.spec?.chapters) {
@@ -82,5 +86,6 @@ export async function DELETE(_req, { params }) {
   await deleteObject(p.s3_key).catch(() => {});
   if (p.preview_key) await deleteObject(p.preview_key).catch(() => {});
   await q("DELETE FROM photos WHERE id=$1", [params.id]);
+  emitTrip(p.trip_id);
   return NextResponse.json({ ok: true });
 }

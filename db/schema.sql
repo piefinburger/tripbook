@@ -126,3 +126,14 @@ ALTER TABLE photos ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'photo'
 ALTER TABLE photos ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'capture'
   CHECK (source IN ('capture','library'));
 ALTER TABLE photos ADD COLUMN IF NOT EXISTS duration_s INT;
+
+-- Trip-level admins (owner-granted moderators) + site admin support
+ALTER TABLE trip_members DROP CONSTRAINT IF EXISTS trip_members_role_check;
+ALTER TABLE trip_members ADD CONSTRAINT trip_members_role_check
+  CHECK (role IN ('owner','admin','member'));
+
+-- Viewer role (read-only family members, e.g. grandparents)
+ALTER TABLE trip_members DROP CONSTRAINT IF EXISTS trip_members_role_check;
+ALTER TABLE trip_members ADD CONSTRAINT trip_members_role_check
+  CHECK (role IN ('owner','admin','member','viewer'));
+ALTER TABLE login_tokens ADD COLUMN IF NOT EXISTS invite_role TEXT DEFAULT 'member';

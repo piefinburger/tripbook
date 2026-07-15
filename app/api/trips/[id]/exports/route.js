@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
 import { q } from "@/lib/db";
-import { currentUser, requireMember } from "@/lib/auth";
+import { currentUser, requireMember, canContribute } from "@/lib/auth";
 import { getOrNullDraft } from "@/lib/book";
 
 export async function GET(_req, { params }) {
   const u = await currentUser();
   if (!u) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  try { await requireMember(params.id, u.id); } catch (r) { return r; }
+  const role = await requireMember(params.id, u.id).catch(r => r);
+  if (role instanceof Response) return role;
+  if (!canContribute(role))
+    return NextResponse.json({ error: "The book is not visible to viewers." }, { status: 403 });
   const exports_ = await q(
     `SELECT id, mode, status, error, created_at FROM book_exports
      WHERE trip_id=$1 ORDER BY id DESC LIMIT 10`, [params.id]);

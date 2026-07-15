@@ -25,8 +25,16 @@ export default function GalleryView({ tripId }) {
     setItems(j.items || []); setMembers(j.members || []); setMe(j.me);
     const t = await fetch(`/api/trips/${tripId}`).then(r => r.json()).catch(() => null);
     if (t?.trip?.my_role) setRole(t.trip.my_role); else if (t?.my_role) setRole(t.my_role);
+    if (t?.siteAdmin) setRole("owner"); // site admin moderates everywhere
   }, [tripId]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const es = new EventSource(`/api/trips/${tripId}/events`);
+    es.onmessage = (e) => {
+      try { if (JSON.parse(e.data).type === "update") load(); } catch {}
+    };
+    return () => es.close();
+  }, [tripId, load]);
 
   const filtered = useMemo(() => (items || []).filter(p =>
     filter === "all" ? true :
@@ -119,7 +127,7 @@ export default function GalleryView({ tripId }) {
 
   // ---- lightbox actions ------------------------------------------------------
   const cur = open != null ? filtered[open] : null;
-  const canEdit = cur && (role === "owner" || cur.user_id === me);
+  const canEdit = cur && (role === "owner" || role === "admin" || cur.user_id === me);
   async function del() {
     if (!confirm("Delete this from the trip for everyone? If it is in the book, it will be removed from those pages (undoable in the editor's History).")) return;
     const r = await fetch(`/api/photos/${cur.id}`, { method: "DELETE" });
@@ -150,8 +158,10 @@ export default function GalleryView({ tripId }) {
     <div className="topbar">
       <Link href={`/trip/${tripId}`} style={{ color: "#cfe3ec" }}>&larr; Timeline</Link>
       <span className="brand">Gallery</span>
-      <a role="button" tabIndex={0} style={{ color: "#f2b441", fontWeight: 700, cursor: "pointer" }}
-        onClick={() => fileRef.current?.click()}>Upload</a>
+      {role !== "viewer"
+        ? <a role="button" tabIndex={0} style={{ color: "#f2b441", fontWeight: 700, cursor: "pointer" }}
+            onClick={() => fileRef.current?.click()}>Upload</a>
+        : <span />}
     </div>
     <input ref={fileRef} type="file" multiple hidden
       accept="image/*,video/mp4,video/quicktime,video/webm" onChange={onPick} />

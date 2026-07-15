@@ -7,15 +7,16 @@ export async function POST(req, { params }) {
   const u = await currentUser();
   if (!u) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try { await requireMember(params.id, u.id); } catch (r) { return r; }
-  const { email } = await req.json();
+  const { email, role } = await req.json();
+  const inviteRole = role === "viewer" ? "viewer" : "member";
   const e = String(email || "").trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e))
     return NextResponse.json({ error: "Enter a valid email address." }, { status: 400 });
   const [trip] = await q("SELECT name FROM trips WHERE id=$1", [params.id]);
   const { raw, hash } = newToken();
   await q(
-    `INSERT INTO login_tokens (token_hash, email, invite_trip_id, expires_at)
-     VALUES ($1,$2,$3, now() + interval '7 days')`, [hash, e, params.id]);
+    `INSERT INTO login_tokens (token_hash, email, invite_trip_id, invite_role, expires_at)
+     VALUES ($1,$2,$3,$4, now() + interval '7 days')`, [hash, e, params.id, inviteRole]);
   await sendMagicLink(e, `${process.env.APP_URL}/api/auth/verify?token=${raw}`, trip.name);
   return NextResponse.json({ ok: true });
 }

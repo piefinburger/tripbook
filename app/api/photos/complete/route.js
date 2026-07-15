@@ -4,6 +4,7 @@ import { q } from "@/lib/db";
 import { currentUser } from "@/lib/auth";
 import { getObjectBuffer, putObject } from "@/lib/s3";
 import { reverseGeocode } from "@/lib/geocode";
+import { emitTrip } from "@/lib/events";
 
 export async function POST(req) {
   const u = await currentUser();
@@ -21,6 +22,7 @@ export async function POST(req) {
       `UPDATE photos SET status='ready', preview_key=$2, width=$3, height=$4, place_name=$5
        WHERE id=$1`,
       [photoId, pk, (width | 0) || null, (height | 0) || null, place]);
+    emitTrip(p.trip_id);
     return NextResponse.json({ ok: true, placeName: place });
   }
 
@@ -35,5 +37,6 @@ export async function POST(req) {
     `UPDATE photos SET status='ready', preview_key=$2, width=$3, height=$4, place_name=$5
      WHERE id=$1`,
     [photoId, previewKey, meta.width || null, meta.height || null, place]);
+  emitTrip(p.trip_id);
   return NextResponse.json({ ok: true, placeName: place });
 }

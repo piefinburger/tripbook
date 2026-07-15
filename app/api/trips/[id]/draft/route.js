@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 import { q } from "@/lib/db";
-import { currentUser, requireMember } from "@/lib/auth";
+import { currentUser, requireMember, canContribute } from "@/lib/auth";
 import { getOrNullDraft, saveDraftSpec } from "@/lib/book";
 import { ensureV2, validateSpec } from "@/lib/specops";
 
 export async function GET(_req, { params }) {
   const u = await currentUser();
   if (!u) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  try { await requireMember(params.id, u.id); } catch (r) { return r; }
+  const role = await requireMember(params.id, u.id).catch(r => r);
+  if (role instanceof Response) return role;
+  if (!canContribute(role))
+    return NextResponse.json({ error: "The book is not visible to viewers." }, { status: 403 });
   const draft = await getOrNullDraft(params.id);
   if (!draft) return NextResponse.json({ draft: null, revisions: [] });
   const revisions = await q(
