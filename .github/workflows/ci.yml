@@ -20,7 +20,14 @@ jobs:
         run: |
           docker run -d --name pg -e POSTGRES_USER=tripbook -e POSTGRES_PASSWORD=ci \
             -e POSTGRES_DB=tripbook -p 5432:5432 postgres:16-alpine
-          for i in $(seq 1 20); do
-            docker exec pg pg_isready -U tripbook && break; sleep 1; done
-          DATABASE_URL=postgres://tripbook:ci@localhost:5432/tripbook node db/migrate.mjs
-          DATABASE_URL=postgres://tripbook:ci@localhost:5432/tripbook node db/migrate.mjs
+          # Probe over host TCP: the image boots a temporary socket-only
+          # server during init, then restarts; only the final server
+          # listens on TCP, so this cannot pass during the init window.
+          for i in $(seq 1 30); do
+            if PGPASSWORD=ci psql -h 127.0.0.1 -U tripbook -d tripbook -c "SELECT 1" > /dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          DATABASE_URL=postgres://tripbook:ci@127.0.0.1:5432/tripbook node db/migrate.mjs
+          DATABASE_URL=postgres://tripbook:ci@127.0.0.1:5432/tripbook node db/migrate.mjs
