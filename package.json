@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "migrate": "node db/migrate.mjs"
+    "migrate": "node db/migrate.mjs",
+    "dev:login": "node scripts/dev-login.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.0",

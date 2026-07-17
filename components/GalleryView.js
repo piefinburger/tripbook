@@ -205,9 +205,9 @@ export default function GalleryView({ tripId }) {
       <div className="lightbox" onClick={() => setOpen(null)}>
         <div className="lb-body" onClick={e => e.stopPropagation()}>
           {cur.kind === "video"
-            ? <video src={cur.videoUrl} poster={cur.url} controls playsInline
+            ? <video src={cur.videoUrl} poster={cur.fullUrl || cur.url} controls playsInline
                 style={{ width: "100%", maxHeight: "70vh", background: "#000" }} />
-            : <img src={cur.url} alt="" />}
+            : <img src={cur.fullUrl || cur.url} alt="" />}
           <div className="lb-meta">
             <b>{cur.author}</b>
             <span>{new Date(cur.ts).toLocaleString()}</span>

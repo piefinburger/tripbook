@@ -139,3 +139,14 @@ ALTER TABLE login_tokens ADD COLUMN IF NOT EXISTS invite_role TEXT DEFAULT 'memb
 
 -- Last-active tracking for the Trip Settings member list
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMPTZ;
+
+-- Thumbnail tier + server-side presigned URL cache (SPEC-PERFORMANCE)
+ALTER TABLE photos ADD COLUMN IF NOT EXISTS thumb_key TEXT;
+CREATE TABLE IF NOT EXISTS photo_urls (
+  photo_id BIGINT NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
+  tier TEXT NOT NULL CHECK (tier IN ('thumb','preview')),
+  url TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (photo_id, tier)
+);
+CREATE INDEX IF NOT EXISTS photo_urls_expiry ON photo_urls(expires_at);

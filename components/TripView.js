@@ -362,7 +362,7 @@ export default function TripView({ tripId }) {
       {lb && (
         <div className="lightbox" onClick={() => setLb(null)}>
           <div className="lb-body" onClick={e => e.stopPropagation()}>
-            <img src={lb.list[lb.i].url} alt="" />
+            <img src={lb.list[lb.i].fullUrl || lb.list[lb.i].url} alt="" />
             <div className="lb-meta">
               <b>{lb.list[lb.i].author}</b>
               <span>{new Date(lb.list[lb.i].ts).toLocaleString()}</span>
