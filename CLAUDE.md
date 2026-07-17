@@ -37,7 +37,8 @@ Media in S3 (originals/ + previews/), email via SES, AI via Anthropic
 ## Commands
 - Build: `npm run build` (must pass before any PR)
 - Migrate: `DATABASE_URL=... node db/migrate.mjs` (idempotent; CI applies twice)
-- Local test pattern: LLM_MOCK=1 + fake AWS creds; see git history smoke tests
+- Local dev: see docs/DEV.md. `npm run dev` + `npm run dev:login` (mints a
+  sign-in token; magic-link email cannot work locally)
 - Deploy: merge to main -> .github/workflows/deploy.yml -> deploy/deploy.sh
   (pre-deploy pg_dump to S3, pull, rebuild, /api/health gate)
 
