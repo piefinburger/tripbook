@@ -12,7 +12,7 @@ whether they block that.
 ## Do these first: they block a good printed book
 
 ### 1. Verify the book renders from ORIGINALS, not previews
-Status: unverified, highest stakes.
+Status: **VERIFIED** (2026-07-24). `app/book/render/[id]/page.js` selects `s3_key` and calls `presignGet` directly — no derivative tier, no URL cache. Confirmed correct.
 
 The PDF is produced by headless Chromium rendering `/book/render/{id}`.
 Check which tier that page's `<img>` srcs resolve to. Previews are 1600px
@@ -25,7 +25,7 @@ per-request and never cached, so the render path should be signing them
 directly.
 
 ### 2. Verify "Download original" really is the original
-Status: probably already correct, five-minute check.
+Status: **VERIFIED** (2026-07-24). `GET /api/photos/[id]` presigns `p.s3_key` with attachment disposition. Confirmed correct.
 
 `GET /api/photos/[id]` presigns `s3_key` with an attachment
 Content-Disposition. Confirm it hasn't drifted to a derivative. Shares a
@@ -74,6 +74,55 @@ Everything in the editor and generation pipeline was verified with
 a real trip (48+ photos, real notes, real EXIF) is genuinely untested.
 Budget time for surprises, and expect the first draft to need editing
 rather than to come out right.
+
+---
+
+## Per-trip upload resolution setting
+
+### 11. Per-trip configurable upload resolution
+Currently `compressImage` (lib/outbox.js) hard-codes a 2400px max dimension and
+q82 JPEG quality for every upload on every trip. For scrapbook-style books with
+multi-photo layouts this is fine, but owners should be able to set a higher cap
+for trips they know will be printed.
+
+**Context:** The "original" stored in S3 (photos.s3_key) is what the book PDF
+renderer and the download endpoint both serve. The client-side compress happens
+before the PUT, so the resolution setting must be sent to the client and applied
+in compressImage. The server never re-encodes the original — only derivatives
+(preview 1600px, thumb 640px) are made server-side in lib/derivatives.js.
+
+**Schema change:** Add `upload_max_dim INTEGER NOT NULL DEFAULT 2400` to the
+`trips` table (additive, idempotent). The column drives the cap sent in the trip
+API response and read by the upload flow.
+
+**The four preset tiers (maxDim → effective full-bleed DPI for 8.5in page):**
+
+| Label | maxDim | Full-bleed DPI | Use case |
+|---|---|---|---|
+| Smaller files (faster upload) | 1600 | 188 DPI | Screen-only trips, no printing |
+| Default | 2400 | 282 DPI | Scrapbook layouts; fine for most print |
+| Higher | 3000 | 353 DPI | Full-bleed pages, safe print margin |
+| Highest | 4000 | 470 DPI | Future-proof; large-format or close-crop |
+
+Note: 300 DPI is the standard print floor. Full-bleed is the worst case;
+smaller layouts (two-up, three-grid, photo-text) are well above 300 DPI even
+at the Default tier.
+
+**New trip flow:** After the trip name, prompt for upload resolution with a
+dropdown defaulting to "Default (2400px)". One extra step; no new page needed.
+
+**Trip settings:** Add a "Upload resolution" card (owner/admin only) with the
+same dropdown and a Save button. Changing mid-trip affects future uploads only —
+photos already in S3 are immutable and their s3_key does not change.
+
+**Upload flow changes:** `GET /api/trips/[id]` already returns the trip row;
+add `upload_max_dim` to that response. TripView.js reads it and passes it to
+`compressImage(f, trip.upload_max_dim)`.
+
+**Not in scope:** Re-processing existing photos at a new resolution, or
+exposing the quality (q82) parameter — the DPI cap is the meaningful knob
+for print, and JPEG quality at q82 is indistinguishable from higher at these
+dimensions.
 
 ---
 

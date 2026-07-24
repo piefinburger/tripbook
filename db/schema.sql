@@ -142,6 +142,27 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMPTZ;
 
 -- Thumbnail tier + server-side presigned URL cache (SPEC-PERFORMANCE)
 ALTER TABLE photos ADD COLUMN IF NOT EXISTS thumb_key TEXT;
+
+-- Timestamp/location audit trail (BACKLOG #3/#4)
+-- entries: original_* preserves the client-sent values before photo inheritance
+-- overwrites ts/lat/lng; used by the manual-edit UI (item #4) to show what
+-- the author wrote vs. what was inferred from attached photos.
+ALTER TABLE entries ADD COLUMN IF NOT EXISTS original_ts TIMESTAMPTZ;
+ALTER TABLE entries ADD COLUMN IF NOT EXISTS original_lat DOUBLE PRECISION;
+ALTER TABLE entries ADD COLUMN IF NOT EXISTS original_lng DOUBLE PRECISION;
+ALTER TABLE entries ADD COLUMN IF NOT EXISTS original_place_name TEXT;
+ALTER TABLE entries ADD COLUMN IF NOT EXISTS ts_source TEXT NOT NULL DEFAULT 'original'
+  CHECK (ts_source IN ('original','photo','manual'));
+UPDATE entries SET original_ts = ts, original_lat = lat, original_lng = lng,
+  original_place_name = place_name
+  WHERE original_ts IS NULL;
+-- photos: original_* preserves EXIF/capture values before any manual override
+-- via item #4. Backfill from current ts/lat/lng so existing rows are covered.
+ALTER TABLE photos ADD COLUMN IF NOT EXISTS original_ts TIMESTAMPTZ;
+ALTER TABLE photos ADD COLUMN IF NOT EXISTS original_lat DOUBLE PRECISION;
+ALTER TABLE photos ADD COLUMN IF NOT EXISTS original_lng DOUBLE PRECISION;
+UPDATE photos SET original_ts = ts, original_lat = lat, original_lng = lng
+  WHERE original_ts IS NULL;
 CREATE TABLE IF NOT EXISTS photo_urls (
   photo_id BIGINT NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
   tier TEXT NOT NULL CHECK (tier IN ('thumb','preview')),
