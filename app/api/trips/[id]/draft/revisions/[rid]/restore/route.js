@@ -1,15 +1,22 @@
 import { NextResponse } from "next/server";
 import { q } from "@/lib/db";
 import { currentUser, requireMember } from "@/lib/auth";
-import { getOrNullDraft } from "@/lib/book";
+import { getDraftById, getOrNullDraft } from "@/lib/book";
 
-export async function POST(_req, { params }) {
+export async function POST(req, { params }) {
   const u = await currentUser();
   if (!u) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const role = await requireMember(params.id, u.id).catch(r => r);
   if (role instanceof Response) return role;
   if (role !== "owner") return NextResponse.json({ error: "Owner only." }, { status: 403 });
-  const draft = await getOrNullDraft(params.id);
+
+  let draftId;
+  try {
+    const body = await req.json();
+    draftId = body?.draftId;
+  } catch { /* no body */ }
+
+  const draft = draftId ? await getDraftById(draftId) : await getOrNullDraft(params.id);
   const [rev] = await q(
     "SELECT spec FROM book_draft_revisions WHERE id=$1 AND draft_id=$2",
     [params.rid, draft?.id]);

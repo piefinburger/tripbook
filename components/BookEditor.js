@@ -2,12 +2,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 
-const TPL_COUNT = { "full-bleed": 1, "two-up": 2, "three-grid": 3, "photo-text": 1, "text-only": 0 };
-const TPL_BY_COUNT = { 0: "text-only", 1: "full-bleed", 2: "two-up", 3: "three-grid" };
+const TPL_COUNT = {
+  "full-bleed": 1, "hero-left": 2, "hero-right": 2, "hero-top": 2, "two-equal": 2,
+  "three-banner": 3, "three-sidebar": 3, "panoramic-strip": 3,
+  "four-grid": 4, "four-asymmetric": 4, "five-mosaic": 5, "six-grid": 6,
+  "photo-text": 1, "text-photo": 1, "text-only": 0,
+  "two-up": 2, "three-grid": 3, // legacy aliases
+};
+const TPL_BY_COUNT = { 0: "text-only", 1: "full-bleed", 2: "two-equal", 3: "three-banner", 4: "four-grid", 5: "five-mosaic", 6: "six-grid" };
 const uid = () => "pg_" + Math.random().toString(16).slice(2, 10);
 
 export default function BookEditor({ tripId }) {
   const [draft, setDraft] = useState(undefined); // undefined loading, null none
+  const [drafts, setDrafts] = useState([]); // all books for this trip
+  const [activeDraftId, setActiveDraftId] = useState(null);
   const [revisions, setRevisions] = useState([]);
   const [photos, setPhotos] = useState([]);
   const [selectedPage, setSelectedPage] = useState(null);
@@ -21,12 +29,17 @@ export default function BookEditor({ tripId }) {
   const needRevision = useRef(true);
   const specRef = useRef(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (draftId) => {
+    const url = draftId
+      ? `/api/trips/${tripId}/draft?draftId=${draftId}`
+      : `/api/trips/${tripId}/draft`;
     const [d, p] = await Promise.all([
-      fetch(`/api/trips/${tripId}/draft`).then(r => r.json()),
+      fetch(url).then(r => r.json()),
       fetch(`/api/trips/${tripId}/photos`).then(r => r.json())
     ]);
     setDraft(d.draft); setRevisions(d.revisions || []);
+    setDrafts(d.drafts || []);
+    if (d.draft?.id) setActiveDraftId(Number(d.draft.id));
     specRef.current = d.draft?.spec || null;
     setPhotos(p.photos || []);
   }, [tripId]);
@@ -36,14 +49,18 @@ export default function BookEditor({ tripId }) {
   useEffect(() => {
     if (draft?.status !== "generating") return;
     const t = setInterval(async () => {
-      const d = await fetch(`/api/trips/${tripId}/draft`).then(r => r.json());
+      const url = activeDraftId
+        ? `/api/trips/${tripId}/draft?draftId=${activeDraftId}`
+        : `/api/trips/${tripId}/draft`;
+      const d = await fetch(url).then(r => r.json());
       if (d.draft?.status !== "generating") {
         setDraft(d.draft); setRevisions(d.revisions || []);
+        setDrafts(d.drafts || []);
         specRef.current = d.draft?.spec || null;
       }
     }, 4000);
     return () => clearInterval(t);
-  }, [draft?.status, tripId]);
+  }, [draft?.status, tripId, activeDraftId]);
 
   const spec = draft?.spec;
   const usedMap = useMemo(() => {
@@ -69,7 +86,7 @@ export default function BookEditor({ tripId }) {
     saveTimer.current = setTimeout(save, 1500);
   }
   async function save() {
-    const body = { spec: specRef.current, cutRevision: needRevision.current };
+    const body = { spec: specRef.current, cutRevision: needRevision.current, draftId: activeDraftId };
     needRevision.current = false;
     const r = await fetch(`/api/trips/${tripId}/draft`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
@@ -158,7 +175,7 @@ export default function BookEditor({ tripId }) {
     setNotice(null);
     const r = await fetch(`/api/trips/${tripId}/draft/ai-edit`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ instruction: instr, scope })
+      body: JSON.stringify({ instruction: instr, scope, draftId: activeDraftId })
     });
     const j = await r.json();
     setBusy("");
@@ -168,20 +185,33 @@ export default function BookEditor({ tripId }) {
       `${j.summary} (${j.applied} change${j.applied === 1 ? "" : "s"}` +
       `${j.rejected?.length ? `, ${j.rejected.length} rejected: ${j.rejected[0].why}` : ""}` +
       `${j.fallback ? ", fallback model used" : ""})` });
-    load();
+    load(activeDraftId);
   }
   async function generate() {
     setBusy("gen");
-    await fetch(`/api/trips/${tripId}/draft/generate`, {
+    const r = await fetch(`/api/trips/${tripId}/draft/generate`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ mode }) });
+    const j = await r.json();
     setBusy("");
-    setDraft(d => d ? { ...d, status: "generating" } : { status: "generating", spec: null });
+    if (j.draftId) {
+      setActiveDraftId(j.draftId);
+      setDraft({ status: "generating", spec: null });
+    }
   }
   async function restore(rid) {
-    await fetch(`/api/trips/${tripId}/draft/revisions/${rid}/restore`, { method: "POST" });
+    await fetch(`/api/trips/${tripId}/draft/revisions/${rid}/restore`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ draftId: activeDraftId })
+    });
     needRevision.current = true;
-    load();
+    load(activeDraftId);
+  }
+  async function switchDraft(id) {
+    clearTimeout(saveTimer.current);
+    setActiveDraftId(id);
+    setSelectedPage(null);
+    load(id);
   }
 
   // ---- render ---------------------------------------------------------------
@@ -195,21 +225,43 @@ export default function BookEditor({ tripId }) {
         {revisions.length > 0 &&
           <a role="button" tabIndex={0} style={{ color: "#cfe3ec", cursor: "pointer" }}
             onClick={() => restore(revisions[0].id)}>Undo</a>}
-        <Link href={`/book/preview/draft/${tripId}`} style={{ color: "#f2b441", fontWeight: 700 }}>
-          Preview</Link>
+        <Link href={`/book/preview/draft/${tripId}?draftId=${activeDraftId}`}
+          style={{ color: "#f2b441", fontWeight: 700 }}>Preview</Link>
       </span>
+    </div>
+  );
+
+  const draftPicker = drafts.length > 0 && (
+    <div className="card" style={{ marginBottom: 8, padding: "10px 16px" }}>
+      <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <span style={{ fontSize: "0.8rem", color: "var(--ink)", opacity: 0.6, whiteSpace: "nowrap" }}>
+          Books:
+        </span>
+        {drafts.map(d => (
+          <button key={d.id} className={`small ${Number(d.id) === activeDraftId ? "" : "secondary"}`}
+            onClick={() => switchDraft(Number(d.id))}
+            title={new Date(d.created_at).toLocaleString()}>
+            {d.name || "Untitled Book"}
+            {d.status === "generating" && " ⏳"}
+            {d.status === "error" && " ⚠"}
+          </button>
+        ))}
+        <button className="small secondary" onClick={() => setDraft(null)}
+          title="Generate a new book from scratch">+ New Book</button>
+      </div>
     </div>
   );
 
   if (!draft || draft.status === "generating" || !spec?.chapters?.length) {
     return (<>{topbar}<main>
+      {draftPicker}
       <div className="card">
         {draft?.status === "generating" ? (
           <><b>Writing the book...</b>
           <p className="muted">Usually under two minutes. This page updates itself.</p></>
         ) : (<>
-          <b>No draft yet</b>
-          <p className="muted">Generate a first draft, then edit every page here.</p>
+          <b>{drafts.length > 0 ? "Generate a new book" : "No draft yet"}</b>
+          <p className="muted">Generate a draft, then edit every page here.</p>
           {draft?.status === "error" && <p className="error">{draft.error}</p>}
           <label htmlFor="mode">How should it be written?</label>
           <select id="mode" value={mode} onChange={e => setMode(e.target.value)}>
@@ -217,7 +269,9 @@ export default function BookEditor({ tripId }) {
             <option value="curated">Curated: only the family&apos;s own words</option>
           </select>
           <div style={{ marginTop: 12 }}>
-            <button onClick={generate} disabled={busy === "gen"}>Generate draft</button>
+            <button onClick={generate} disabled={busy === "gen"}>
+              {busy === "gen" ? "Starting..." : drafts.length > 0 ? "Generate new book" : "Generate draft"}
+            </button>
           </div>
         </>)}
       </div>
@@ -241,6 +295,7 @@ export default function BookEditor({ tripId }) {
       style={notice.kind === "error" ? { background: "#f3c8bd" } : {}}
       onClick={() => setNotice(null)}>{notice.text}</div>}
     <main className="wide">
+      {draftPicker}
       <div className="ed-layout">
         <div>
           <div className="card row" style={{ justifyContent: "space-between" }}>

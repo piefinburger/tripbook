@@ -72,13 +72,19 @@ ALTER TABLE trips ADD CONSTRAINT trips_cover_fk
 -- Book editor (SPEC-BOOK-EDITOR)
 CREATE TABLE IF NOT EXISTS book_drafts (
   id BIGSERIAL PRIMARY KEY,
-  trip_id BIGINT NOT NULL UNIQUE REFERENCES trips(id) ON DELETE CASCADE,
+  trip_id BIGINT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  name TEXT NOT NULL DEFAULT 'Untitled Book',
   spec JSONB NOT NULL,
   mode TEXT NOT NULL DEFAULT 'auto',
   status TEXT NOT NULL DEFAULT 'idle' CHECK (status IN ('idle','generating','error')),
   error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Remove the one-draft-per-trip unique constraint (multi-book support)
+ALTER TABLE book_drafts DROP CONSTRAINT IF EXISTS book_drafts_trip_id_key;
+ALTER TABLE book_drafts ADD COLUMN IF NOT EXISTS name TEXT NOT NULL DEFAULT 'Untitled Book';
+ALTER TABLE book_drafts ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 CREATE TABLE IF NOT EXISTS book_draft_revisions (
   id BIGSERIAL PRIMARY KEY,
   draft_id BIGINT NOT NULL REFERENCES book_drafts(id) ON DELETE CASCADE,
