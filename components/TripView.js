@@ -7,6 +7,9 @@ import { queueItem, flushOutbox, installFlushTriggers, outboxCount,
 const initials = (n) => (n || "?").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
 const dayKey = (ts) => new Date(ts).toLocaleDateString(undefined,
   { weekday: "long", month: "long", day: "numeric" });
+const fmtTs = (ts) => new Date(ts).toLocaleString([], {
+  month: "2-digit", day: "2-digit", year: "numeric",
+  hour: "numeric", minute: "2-digit" });
 
 export default function TripView({ tripId }) {
   const [trip, setTrip] = useState(null);
@@ -292,16 +295,33 @@ export default function TripView({ tripId }) {
                     </span>
                   )}
                   <div className="meta">
-                    {it.author} &middot; {new Date(it.ts).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                    {it.place_name ? <> &middot; {it.place_name}</> : null}
-                    {it.type === "entry" && editing !== it.id && (mine(it) || canModerate) && (
-                      <span className="act-links">
-                        <a role="button" tabIndex={0}
-                          onClick={() => { setEditing(it.id); setEditText(it.text || ""); }}>Edit</a>
-                        <a role="button" tabIndex={0}
-                          onClick={() => deleteEntry(it.id)}>Delete</a>
-                      </span>
-                    )}
+                    {it.type === "entry" ? (<>
+                      <div className="meta-row">
+                        <span className="meta-label">Created:</span>
+                        {it.author} &middot; {fmtTs(it.original_ts || it.ts)}
+                        {(it.original_place_name || (!it.ts_source || it.ts_source === "original" ? it.place_name : null))
+                          ? <> &middot; {it.original_place_name || it.place_name}</>
+                          : null}
+                      </div>
+                      {it.ts_source && it.ts_source !== "original" && (
+                        <div className="meta-row meta-updated">
+                          <span className="meta-label">Updated:</span>
+                          {it.ts_source === "photo" ? "Photo driven" : "Manually updated"} &middot; {fmtTs(it.ts)}
+                          {it.place_name ? <> &middot; {it.place_name}</> : null}
+                        </div>
+                      )}
+                      {editing !== it.id && (mine(it) || canModerate) && (
+                        <span className="act-links">
+                          <a role="button" tabIndex={0}
+                            onClick={() => { setEditing(it.id); setEditText(it.text || ""); }}>Edit</a>
+                          <a role="button" tabIndex={0}
+                            onClick={() => deleteEntry(it.id)}>Delete</a>
+                        </span>
+                      )}
+                    </>) : (<>
+                      {it.author} &middot; {new Date(it.ts).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                      {it.place_name ? <> &middot; {it.place_name}</> : null}
+                    </>)}
                   </div>
                 </div>
               </article>

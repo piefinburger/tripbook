@@ -46,16 +46,22 @@ export async function POST(req) {
     }
   }
 
-  const place = await reverseGeocode(effectiveLat, effectiveLng);
+  const originalPlace = await reverseGeocode(originalLat, originalLng);
+  const effectivePlace = (effectiveLat === originalLat && effectiveLng === originalLng)
+    ? originalPlace
+    : await reverseGeocode(effectiveLat, effectiveLng);
+  const tsSource = effectiveTs === originalTs ? "original" : "photo";
+
   const [entry] = await q(
     `INSERT INTO entries
        (trip_id, user_id, client_id, ts, lat, lng, place_name, text,
-        original_ts, original_lat, original_lng)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+        original_ts, original_lat, original_lng, original_place_name, ts_source)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
      ON CONFLICT (client_id) DO UPDATE SET text=EXCLUDED.text
      RETURNING id`,
     [tripId, u.id, clientId || null, effectiveTs, effectiveLat, effectiveLng,
-     place, finalText, originalTs, originalLat, originalLng]);
+     effectivePlace, finalText, originalTs, originalLat, originalLng,
+     originalPlace, tsSource]);
   if (Array.isArray(photoIds) && photoIds.length)
     await q(
       `UPDATE photos SET entry_id=$1 WHERE id = ANY($2) AND trip_id=$3 AND user_id=$4`,

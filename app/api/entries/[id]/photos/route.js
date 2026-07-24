@@ -33,21 +33,25 @@ export async function POST(req, { params }) {
   // Covers the "write note first, attach photos after" flow. original_* columns
   // preserve whatever the entry had before so item #4 can show the audit trail.
   const [earliest] = await q(
-    `SELECT ts, lat, lng FROM photos
+    `SELECT ts, lat, lng, place_name FROM photos
      WHERE entry_id=$1 AND status='ready' AND kind='photo'
      ORDER BY ts ASC LIMIT 1`,
     [entry.id]);
   if (earliest) {
     await q(
       `UPDATE entries SET
-         original_ts  = COALESCE(original_ts, ts),
-         original_lat = COALESCE(original_lat, lat),
-         original_lng = COALESCE(original_lng, lng),
-         ts  = $2,
-         lat = CASE WHEN $3::double precision IS NOT NULL THEN $3 ELSE lat END,
-         lng = CASE WHEN $4::double precision IS NOT NULL THEN $4 ELSE lng END
+         original_ts         = COALESCE(original_ts, ts),
+         original_lat        = COALESCE(original_lat, lat),
+         original_lng        = COALESCE(original_lng, lng),
+         original_place_name = COALESCE(original_place_name, place_name),
+         ts        = $2,
+         lat       = CASE WHEN $3::double precision IS NOT NULL THEN $3 ELSE lat END,
+         lng       = CASE WHEN $4::double precision IS NOT NULL THEN $4 ELSE lng END,
+         place_name = COALESCE($5, place_name),
+         ts_source = 'photo'
        WHERE id=$1`,
-      [entry.id, earliest.ts, earliest.lat ?? null, earliest.lng ?? null]);
+      [entry.id, earliest.ts, earliest.lat ?? null, earliest.lng ?? null,
+       earliest.place_name ?? null]);
   }
 
   emitTrip(entry.trip_id);

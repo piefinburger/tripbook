@@ -150,7 +150,11 @@ ALTER TABLE photos ADD COLUMN IF NOT EXISTS thumb_key TEXT;
 ALTER TABLE entries ADD COLUMN IF NOT EXISTS original_ts TIMESTAMPTZ;
 ALTER TABLE entries ADD COLUMN IF NOT EXISTS original_lat DOUBLE PRECISION;
 ALTER TABLE entries ADD COLUMN IF NOT EXISTS original_lng DOUBLE PRECISION;
-UPDATE entries SET original_ts = ts, original_lat = lat, original_lng = lng
+ALTER TABLE entries ADD COLUMN IF NOT EXISTS original_place_name TEXT;
+ALTER TABLE entries ADD COLUMN IF NOT EXISTS ts_source TEXT NOT NULL DEFAULT 'original'
+  CHECK (ts_source IN ('original','photo','manual'));
+UPDATE entries SET original_ts = ts, original_lat = lat, original_lng = lng,
+  original_place_name = place_name
   WHERE original_ts IS NULL;
 -- photos: original_* preserves EXIF/capture values before any manual override
 -- via item #4. Backfill from current ts/lat/lng so existing rows are covered.

@@ -10,7 +10,8 @@ export async function GET(req, { params }) {
   const person = new URL(req.url).searchParams.get("person");
 
   const entries = await q(
-    `SELECT e.id, e.ts, e.text, e.place_name, e.user_id, u.name AS author
+    `SELECT e.id, e.ts, e.text, e.place_name, e.user_id, u.name AS author,
+            e.original_ts, e.original_place_name, e.ts_source
      FROM entries e JOIN users u ON u.id=e.user_id
      WHERE e.trip_id=$1 ${person ? "AND e.user_id=$2" : ""} ORDER BY e.ts`,
     person ? [params.id, person] : [params.id]);
