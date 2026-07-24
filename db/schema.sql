@@ -174,3 +174,6 @@ CREATE TABLE IF NOT EXISTS photo_urls (
   PRIMARY KEY (photo_id, tier)
 );
 CREATE INDEX IF NOT EXISTS photo_urls_expiry ON photo_urls(expires_at);
+
+-- iOS location prompt (BACKLOG #12)
+ALTER TABLE trip_members ADD COLUMN IF NOT EXISTS location_prompt_dismissed BOOLEAN NOT NULL DEFAULT false;
