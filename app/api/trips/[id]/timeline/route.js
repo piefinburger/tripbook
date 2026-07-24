@@ -17,8 +17,11 @@ export async function GET(req, { params }) {
     person ? [params.id, person] : [params.id]);
   const photos = await q(
     `SELECT p.id, p.ts, p.place_name, p.entry_id, p.user_id, p.preview_key, p.thumb_key, p.lat, p.lng,
-            p.width, p.height, u.name AS author
-     FROM photos p JOIN users u ON u.id=p.user_id
+            p.width, p.height, p.original_place_name, p.location_updated_by_id,
+            u.name AS author, lu.name AS location_updated_by
+     FROM photos p
+     JOIN users u ON u.id=p.user_id
+     LEFT JOIN users lu ON lu.id=p.location_updated_by_id
      WHERE p.trip_id=$1 AND p.status='ready' AND p.kind='photo' ${person ? "AND p.user_id=$2" : ""}
      ORDER BY p.ts`, person ? [params.id, person] : [params.id]);
   // url = thumb tier (what the grid renders), fullUrl = preview (lightbox).

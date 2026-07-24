@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { q } from "@/lib/db";
 import { currentUser, requireMember, canModerate, isSiteAdmin } from "@/lib/auth";
+import { reverseGeocode, searchPlace } from "@/lib/geocode";
 import { emitTrip } from "@/lib/events";
 
 async function loadEntry(id, user) {
@@ -20,13 +21,45 @@ export async function PUT(req, { params }) {
   if (!u) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const [e, err] = await loadEntry(params.id, u);
   if (err) return err;
-  const { text } = await req.json();
+  const { text, ts, location } = await req.json();
   const clean = String(text || "").slice(0, 20000);
   if (!clean.trim())
     return NextResponse.json({ error: "A note cannot be empty. Delete it instead." }, { status: 400 });
-  await q("UPDATE entries SET text=$2 WHERE id=$1", [e.id, clean]);
+
+  // Text-only edit (no ts/location fields sent) — fast path, no geocoding.
+  if (!ts && !location) {
+    await q("UPDATE entries SET text=$2 WHERE id=$1", [e.id, clean]);
+    emitTrip(e.trip_id);
+    return NextResponse.json({ ok: true });
+  }
+
+  // Manual date/time or location edit.
+  const newTs = ts ? new Date(ts).toISOString() : null;
+  let newLat = e.lat, newLng = e.lng, newPlace = e.place_name;
+  if (location) {
+    const hit = await searchPlace(location);
+    if (hit) { newLat = hit.lat; newLng = hit.lng; newPlace = hit.name; }
+    else { newPlace = location; } // keep coords, use typed text as place name
+  }
+  if (newTs && !location) {
+    // ts changed but location didn't — re-geocode in case it matters (no-op if same coords)
+    newPlace = (await reverseGeocode(newLat, newLng)) || newPlace;
+  }
+
+  await q(
+    `UPDATE entries SET
+       text=$2,
+       ts        = COALESCE($3, ts),
+       lat       = $4, lng = $5, place_name = $6,
+       original_ts         = COALESCE(original_ts, ts),
+       original_lat        = COALESCE(original_lat, lat),
+       original_lng        = COALESCE(original_lng, lng),
+       original_place_name = COALESCE(original_place_name, place_name),
+       ts_source = 'manual'
+     WHERE id=$1`,
+    [e.id, clean, newTs, newLat, newLng, newPlace]);
   emitTrip(e.trip_id);
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, placeName: newPlace });
 }
 
 export async function DELETE(_req, { params }) {
