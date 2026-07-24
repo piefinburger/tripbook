@@ -434,3 +434,77 @@ main.wide { max-width: 1280px; }
 .tray-item-drag { cursor: grab; }
 .tray-item-drag:active { cursor: grabbing; opacity: 0.7; }
 .tray-item-dragging { opacity: 0.4; }
+
+/* ═══════════════════════════════════════════════════════════════
+   BOOK PAGE LAYOUT TEMPLATES
+   Shared by PageCanvas (editor) and BookPages (PDF renderer).
+   Editor grid children are div.pg-slot; renderer children are img.
+   Selectors use > :nth-child() to match both.
+   ═══════════════════════════════════════════════════════════════ */
+
+.page-canvas-inner { position: relative; }
+
+/* border-radius for grid photos — both img (renderer) and .pg-slot (editor) */
+.bk-grid > img, .bk-grid > .pg-slot { border-radius: 6px; }
+.tpl-five-mosaic .mosaic-right > img,
+.tpl-five-mosaic .mosaic-right > .pg-slot { border-radius: 6px; width: 100%; height: 100%; }
+
+/* ── text block ── */
+.txt-block { padding: 0.5in 0.7in; font-size: 11.5pt; line-height: 1.75;
+  white-space: pre-wrap; overflow: hidden; }
+
+/* ── single-photo ── */
+.tpl-full-bleed { position: relative; width: 100%; height: 100%; }
+.tpl-full-bleed > img,
+.tpl-full-bleed > .pg-slot { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+.tpl-photo-text { display: grid; grid-template-rows: 3fr 2fr; height: 100%; }
+.tpl-text-photo { display: grid; grid-template-columns: 9fr 11fr; height: 100%; }
+.tpl-text-only { display: flex; align-items: center; height: 100%; }
+
+/* ── two-photo ── */
+.tpl-two-equal, .tpl-hero-left, .tpl-hero-right, .tpl-hero-top {
+  display: grid; gap: 0.2in; padding: 0.35in; height: 100%; box-sizing: border-box;
+}
+.tpl-two-equal { grid-template-columns: 1fr 1fr; }
+.tpl-hero-left  { grid-template-columns: 7fr 3fr; }
+.tpl-hero-right { grid-template-columns: 3fr 7fr; }
+.tpl-hero-top   { grid-template-rows: 13fr 7fr; grid-template-columns: 1fr; }
+
+/* ── three-photo ── */
+.tpl-three-banner, .tpl-three-sidebar, .tpl-panoramic-strip {
+  display: grid; gap: 0.2in; padding: 0.35in; height: 100%; box-sizing: border-box;
+}
+.tpl-three-banner { grid-template-rows: 3fr 2fr; grid-template-columns: 1fr 1fr; }
+.tpl-three-banner > :first-child { grid-column: 1 / -1; }
+.tpl-three-sidebar { grid-template-columns: 3fr 2fr; grid-template-rows: 1fr 1fr; }
+.tpl-three-sidebar > :first-child { grid-row: 1 / -1; }
+.tpl-panoramic-strip { grid-template-rows: 1fr 1fr 1fr; grid-template-columns: 1fr; }
+
+/* ── four-photo ── */
+.tpl-four-grid, .tpl-four-asymmetric {
+  display: grid; gap: 0.2in; padding: 0.35in; height: 100%; box-sizing: border-box;
+}
+.tpl-four-grid { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.tpl-four-asymmetric { grid-template-columns: 3fr 2fr; grid-template-rows: 3fr 2fr; }
+.tpl-four-asymmetric > :nth-child(1) { grid-row: 1; grid-column: 1; }
+.tpl-four-asymmetric > :nth-child(2) { grid-row: 1; grid-column: 2; }
+.tpl-four-asymmetric > :nth-child(3) { grid-row: 2; grid-column: 1; }
+.tpl-four-asymmetric > :nth-child(4) { grid-row: 2; grid-column: 2; }
+
+/* ── five-photo ── */
+.tpl-five-mosaic {
+  display: grid; gap: 0.2in; padding: 0.35in; height: 100%; box-sizing: border-box;
+  grid-template-columns: 3fr 2fr; grid-template-rows: 1fr 1fr;
+}
+.tpl-five-mosaic > :first-child { grid-row: 1 / -1; }
+.tpl-five-mosaic .mosaic-right {
+  display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
+  gap: 0.2in; grid-row: 1 / -1;
+}
+
+/* ── six-photo ── */
+.tpl-six-grid {
+  display: grid; gap: 0.2in; padding: 0.35in; height: 100%; box-sizing: border-box;
+  grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr;
+}
