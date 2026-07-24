@@ -161,7 +161,10 @@ UPDATE entries SET original_ts = ts, original_lat = lat, original_lng = lng,
 ALTER TABLE photos ADD COLUMN IF NOT EXISTS original_ts TIMESTAMPTZ;
 ALTER TABLE photos ADD COLUMN IF NOT EXISTS original_lat DOUBLE PRECISION;
 ALTER TABLE photos ADD COLUMN IF NOT EXISTS original_lng DOUBLE PRECISION;
-UPDATE photos SET original_ts = ts, original_lat = lat, original_lng = lng
+ALTER TABLE photos ADD COLUMN IF NOT EXISTS original_place_name TEXT;
+ALTER TABLE photos ADD COLUMN IF NOT EXISTS location_updated_by_id BIGINT REFERENCES users(id);
+UPDATE photos SET original_ts = ts, original_lat = lat, original_lng = lng,
+  original_place_name = place_name
   WHERE original_ts IS NULL;
 CREATE TABLE IF NOT EXISTS photo_urls (
   photo_id BIGINT NOT NULL REFERENCES photos(id) ON DELETE CASCADE,

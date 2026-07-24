@@ -10,6 +10,11 @@ const dayKey = (ts) => new Date(ts).toLocaleDateString(undefined,
 const fmtTs = (ts) => new Date(ts).toLocaleString([], {
   month: "2-digit", day: "2-digit", year: "numeric",
   hour: "numeric", minute: "2-digit" });
+// Converts an ISO timestamp to the format datetime-local inputs expect (no seconds, no Z).
+const toDatetimeLocal = (ts) => {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}T${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+};
 
 export default function TripView({ tripId }) {
   const [trip, setTrip] = useState(null);
@@ -25,11 +30,14 @@ export default function TripView({ tripId }) {
   const [siteAdmin, setSiteAdmin] = useState(false);
   const [editing, setEditing] = useState(null);      // entry id being edited
   const [editText, setEditText] = useState("");
+  const [editTs, setEditTs] = useState("");           // datetime-local string
+  const [editLocation, setEditLocation] = useState(""); // place name text
   const [lb, setLb] = useState(null);                 // {list:[photo], i} lightbox
   const [selecting, setSelecting] = useState(false);  // group-photos mode
   const [selected, setSelected] = useState([]);       // photoIds picked for grouping
   const [groupMeta, setGroupMeta] = useState(null);   // {ts,lat,lng} carried onto the note
   const [photoMenu, setPhotoMenu] = useState(null);    // photoId: ungroup-or-delete sheet
+  const [photoEdit, setPhotoEdit] = useState(null);    // {id, placeName}: location edit sheet
   const [pickingNote, setPickingNote] = useState(false); // choosing a note to add selection to
   const [noteOpen, setNoteOpen] = useState(false);   // note composer popup
   const fileRef = useRef(null);
@@ -103,18 +111,32 @@ export default function TripView({ tripId }) {
     if (j.url) window.location.href = j.url;
   }
 
-  async function saveEdit(entryId) {
+  async function saveEdit(entryId, originalTs) {
+    const tsChanged = editTs && editTs !== toDatetimeLocal(originalTs);
+    const locChanged = editLocation.trim() !== "";
     const r = await fetch(`/api/entries/${entryId}`, { method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: editText }) });
+      body: JSON.stringify({
+        text: editText,
+        ...(tsChanged ? { ts: new Date(editTs).toISOString() } : {}),
+        ...(locChanged ? { location: editLocation.trim() } : {}),
+      }) });
     if (!r.ok) { alert((await r.json()).error); return; }
-    setEditing(null); setEditText("");
+    setEditing(null); setEditText(""); setEditTs(""); setEditLocation("");
     loadTimeline();
   }
   async function deleteEntry(entryId) {
     if (!confirm("Delete this note for everyone? Photos attached to it stay in the trip.")) return;
     const r = await fetch(`/api/entries/${entryId}`, { method: "DELETE" });
     if (!r.ok) { alert((await r.json()).error); return; }
+    loadTimeline();
+  }
+  async function savePhotoLocation() {
+    const r = await fetch(`/api/photos/${photoEdit.id}`, { method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ placeName: photoEdit.placeName }) });
+    if (!r.ok) { alert((await r.json()).error); return; }
+    setPhotoEdit(null);
     loadTimeline();
   }
   async function ungroupPhoto(photoId) {
@@ -257,11 +279,17 @@ export default function TripView({ tripId }) {
                       <>
                         <textarea rows={3} value={editText} autoFocus
                           onChange={e => setEditText(e.target.value)} />
+                        <label className="edit-label">Date &amp; time</label>
+                        <input type="datetime-local" value={editTs}
+                          onChange={e => setEditTs(e.target.value)} />
+                        <label className="edit-label">Location</label>
+                        <input type="text" value={editLocation} placeholder="e.g. Paris, France"
+                          onChange={e => setEditLocation(e.target.value)} />
                         <div className="row" style={{ marginTop: 6 }}>
-                          <button className="small" onClick={() => saveEdit(it.id)}
+                          <button className="small" onClick={() => saveEdit(it.id, it.original_ts || it.ts)}
                             disabled={!editText.trim()}>Save</button>
                           <button className="small secondary"
-                            onClick={() => { setEditing(null); setEditText(""); }}>Cancel</button>
+                            onClick={() => { setEditing(null); setEditText(""); setEditTs(""); setEditLocation(""); }}>Cancel</button>
                         </div>
                       </>
                     ) : (
@@ -273,9 +301,16 @@ export default function TripView({ tripId }) {
                               <span key={p.id} className="pwrap"
                                 onClick={() => openLb(it.photos, p.id)}>
                                 <img src={p.url} alt="" loading="lazy" />
-                                {(mine(p) || canModerate) &&
+                                <div className="photo-hover-meta">
+                                  {p.author} &middot; {new Date(p.ts).toLocaleString([], { month: "numeric", day: "numeric", year: "2-digit", hour: "numeric", minute: "2-digit" })}
+                                  {p.place_name ? ` · ${p.place_name}` : " · No Location"}
+                                </div>
+                                {(mine(p) || canModerate) && <>
                                   <button className="pdel" aria-label="Photo options"
-                                    onClick={e => { e.stopPropagation(); setPhotoMenu(Number(p.id)); }}>&times;</button>}
+                                    onClick={e => { e.stopPropagation(); setPhotoMenu(Number(p.id)); }}>&times;</button>
+                                  <button className="pedit" aria-label="Edit photo location"
+                                    onClick={e => { e.stopPropagation(); setPhotoEdit({ id: Number(p.id), placeName: p.place_name || "" }); }}>✎</button>
+                                </>}
                               </span>))}
                           </div>
                         )}
@@ -287,11 +322,18 @@ export default function TripView({ tripId }) {
                         ? (mine(it) && toggleSel(Number(it.id)))
                         : openLb(d.items.filter(x => x.type === "photo"), it.id)}>
                       <img src={it.url} alt="" loading="lazy" />
+                      <div className="photo-hover-meta">
+                        {it.author} &middot; {new Date(it.ts).toLocaleString([], { month: "numeric", day: "numeric", year: "2-digit", hour: "numeric", minute: "2-digit" })}
+                        {it.place_name ? ` · ${it.place_name}` : " · No Location"}
+                      </div>
                       {selecting && selected.includes(Number(it.id)) &&
                         <span className="pcheck">&#10003;</span>}
-                      {!selecting && (mine(it) || canModerate) &&
+                      {!selecting && (mine(it) || canModerate) && <>
                         <button className="pdel" aria-label="Delete photo"
-                          onClick={e => { e.stopPropagation(); deletePhoto(it.id); }}>&times;</button>}
+                          onClick={e => { e.stopPropagation(); deletePhoto(it.id); }}>&times;</button>
+                        <button className="pedit" aria-label="Edit photo location"
+                          onClick={e => { e.stopPropagation(); setPhotoEdit({ id: Number(it.id), placeName: it.place_name || "" }); }}>✎</button>
+                      </>}
                     </span>
                   )}
                   <div className="meta">
@@ -313,7 +355,12 @@ export default function TripView({ tripId }) {
                       {editing !== it.id && (mine(it) || canModerate) && (
                         <span className="act-links">
                           <a role="button" tabIndex={0}
-                            onClick={() => { setEditing(it.id); setEditText(it.text || ""); }}>Edit</a>
+                            onClick={() => {
+                              setEditing(it.id);
+                              setEditText(it.text || "");
+                              setEditTs(toDatetimeLocal(it.ts));
+                              setEditLocation(it.place_name || "");
+                            }}>Edit</a>
                           <a role="button" tabIndex={0}
                             onClick={() => deleteEntry(it.id)}>Delete</a>
                         </span>
@@ -379,14 +426,38 @@ export default function TripView({ tripId }) {
           </div>
         </div>
       )}
+      {photoEdit && (
+        <div className="lightbox" onClick={() => setPhotoEdit(null)}>
+          <div className="pm-sheet" onClick={e => e.stopPropagation()}>
+            <b>Edit photo location</b>
+            <label className="edit-label">Search for a place</label>
+            <input type="text" value={photoEdit.placeName}
+              placeholder="e.g. Paris, France"
+              onChange={e => setPhotoEdit({ ...photoEdit, placeName: e.target.value })} />
+            <p className="muted" style={{ margin: "4px 0 8px", fontSize: "0.8rem" }}>
+              Type a place name and we&apos;ll look up the coordinates automatically.
+            </p>
+            <button onClick={savePhotoLocation} disabled={!photoEdit.placeName.trim()}>Save</button>
+            <button className="ghost" onClick={() => setPhotoEdit(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
       {lb && (
         <div className="lightbox" onClick={() => setLb(null)}>
           <div className="lb-body" onClick={e => e.stopPropagation()}>
             <img src={lb.list[lb.i].fullUrl || lb.list[lb.i].url} alt="" />
             <div className="lb-meta">
-              <b>{lb.list[lb.i].author}</b>
-              <span>{new Date(lb.list[lb.i].ts).toLocaleString()}</span>
-              <span>{lb.list[lb.i].place_name || ""}</span>
+              <span>
+                <b>{lb.list[lb.i].author}</b>
+                {" · "}{new Date(lb.list[lb.i].ts).toLocaleString()}
+                {lb.list[lb.i].location_updated_by ? (<>
+                  {" · "}{lb.list[lb.i].original_place_name || "No Location"}
+                  {" · Updated Location ("}{lb.list[lb.i].location_updated_by}{"): "}
+                  {lb.list[lb.i].place_name}
+                </>) : lb.list[lb.i].place_name ? (
+                  <>{" · "}{lb.list[lb.i].place_name}</>
+                ) : null}
+              </span>
             </div>
             <div className="lb-actions">
               {lb.i > 0 && <button onClick={() => setLb({ ...lb, i: lb.i - 1 })}>&larr; Prev</button>}

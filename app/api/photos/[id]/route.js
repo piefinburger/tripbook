@@ -57,10 +57,22 @@ export async function PATCH(req, { params }) {
   const text = String(placeName || "").trim().slice(0, 120);
   if (!text) return NextResponse.json({ error: "Type a place name." }, { status: 400 });
   const hit = await searchPlace(text);
-  await q("UPDATE photos SET place_name=$2, lat=COALESCE($3,lat), lng=COALESCE($4,lng) WHERE id=$1",
-    [params.id, hit?.name || text, hit?.lat ?? null, hit?.lng ?? null]);
+  const newPlace = hit?.name || text;
+  const newLat = hit?.lat ?? null;
+  const newLng = hit?.lng ?? null;
+  await q(
+    `UPDATE photos SET
+       place_name = $2,
+       lat = COALESCE($3, lat),
+       lng = COALESCE($4, lng),
+       original_place_name     = COALESCE(original_place_name, place_name),
+       original_lat            = COALESCE(original_lat, lat),
+       original_lng            = COALESCE(original_lng, lng),
+       location_updated_by_id  = $5
+     WHERE id=$1`,
+    [params.id, newPlace, newLat, newLng, u.id]);
   emitTrip(p.trip_id);
-  return NextResponse.json({ ok: true, placeName: hit?.name || text });
+  return NextResponse.json({ ok: true, placeName: newPlace });
 }
 
 // Delete: uploader or trip owner. Cleans the photo out of the book draft
