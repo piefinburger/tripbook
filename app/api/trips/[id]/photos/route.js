@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { q } from "@/lib/db";
-import { currentUser, requireMember } from "@/lib/auth";
+import { currentUser, requireMember, isSiteAdmin } from "@/lib/auth";
 import { urlsForPhotos } from "@/lib/photoUrls";
+import { searchPlace } from "@/lib/geocode";
+import { emitTrip } from "@/lib/events";
 
 // Full photo list for the editor tray, with scores and previews.
 export async function GET(_req, { params }) {
@@ -20,4 +22,40 @@ export async function GET(_req, { params }) {
     delete p.preview_key; delete p.thumb_key;
   }
   return NextResponse.json({ photos });
+}
+
+// Bulk-update location for a set of photos (owner/admin only).
+// Body: { photoIds: number[], placeName: string }
+export async function PATCH(req, { params }) {
+  const u = await currentUser();
+  if (!u) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const role = await requireMember(params.id, u.id).catch(r => r);
+  if (role instanceof Response && !isSiteAdmin(u)) return role;
+  if (role !== "owner" && role !== "admin" && !isSiteAdmin(u))
+    return NextResponse.json({ error: "Owner or admin only." }, { status: 403 });
+
+  const { photoIds, placeName } = await req.json();
+  if (!Array.isArray(photoIds) || photoIds.length === 0)
+    return NextResponse.json({ error: "No photos selected." }, { status: 400 });
+  if (!placeName?.trim())
+    return NextResponse.json({ error: "Place name is required." }, { status: 400 });
+
+  const geo = await searchPlace(placeName.trim());
+  if (!geo) return NextResponse.json({ error: "Could not find that location. Try a more specific name." }, { status: 422 });
+
+  // Restrict to photos that actually belong to this trip (security: never trust client IDs).
+  await q(
+    `UPDATE photos SET
+       place_name              = $2,
+       lat                     = $3,
+       lng                     = $4,
+       original_place_name     = COALESCE(original_place_name, place_name),
+       original_lat            = COALESCE(original_lat, lat),
+       original_lng            = COALESCE(original_lng, lng),
+       location_updated_by_id  = $5
+     WHERE id = ANY($1) AND trip_id = $6`,
+    [photoIds.map(Number), geo.name, geo.lat, geo.lng, u.id, params.id]);
+
+  await emitTrip(params.id);
+  return NextResponse.json({ ok: true, appliedTo: photoIds.length, location: geo.name });
 }

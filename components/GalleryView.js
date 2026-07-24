@@ -18,6 +18,12 @@ export default function GalleryView({ tripId }) {
   const [filter, setFilter] = useState("all"); // all | untagged | member id
   const [open, setOpen] = useState(null);      // index into filtered
   const [queue, setQueue] = useState([]);      // {name, state: waiting|uploading|done|error, err}
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkSelected, setBulkSelected] = useState(new Set());
+  const [bulkPlace, setBulkPlace] = useState("");
+  const [bulkConfirm, setBulkConfirm] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkError, setBulkError] = useState("");
   const fileRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -149,25 +155,65 @@ export default function GalleryView({ tripId }) {
     load();
   }
 
+  function exitBulk() {
+    setBulkMode(false); setBulkSelected(new Set());
+    setBulkPlace(""); setBulkConfirm(false); setBulkError("");
+  }
+  function toggleBulk(id) {
+    setBulkSelected(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+  function selectAllWithoutLocation() {
+    const ids = (items || []).filter(p => !p.place_name && p.kind !== "video").map(p => p.id);
+    setBulkSelected(new Set(ids));
+  }
+  async function applyBulkLocation() {
+    setBulkBusy(true); setBulkError("");
+    const r = await fetch(`/api/trips/${tripId}/photos`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ photoIds: [...bulkSelected], placeName: bulkPlace.trim() }),
+    });
+    const j = await r.json();
+    setBulkBusy(false);
+    if (!r.ok) { setBulkError(j.error || "Something went wrong."); return; }
+    exitBulk();
+    load();
+  }
+
   if (items === null) return <main><p className="muted">Loading gallery...</p></main>;
 
   const uploading = queue.filter(x => x.state === "uploading" || x.state === "waiting").length;
   const errors = queue.filter(x => x.state === "error");
 
+  const canManage = role === "owner" || role === "admin";
+
   return (<>
     <div className="topbar">
       <Link href={`/trip/${tripId}`} style={{ color: "#cfe3ec" }}>&larr; Timeline</Link>
       <span className="brand">Gallery</span>
-      {role !== "viewer"
-        ? <a role="button" tabIndex={0} style={{ color: "#f2b441", fontWeight: 700, cursor: "pointer" }}
-            onClick={() => fileRef.current?.click()}>Upload</a>
-        : <span />}
+      <span className="row" style={{ gap: 12 }}>
+        {canManage && !bulkMode && (
+          <a role="button" tabIndex={0} style={{ color: "#cfe3ec", cursor: "pointer", fontSize: "0.9rem" }}
+            onClick={() => setBulkMode(true)}>Edit locations</a>)}
+        {bulkMode && (
+          <a role="button" tabIndex={0} style={{ color: "#cfe3ec", cursor: "pointer", fontSize: "0.9rem" }}
+            onClick={exitBulk}>Cancel</a>)}
+        {role !== "viewer" && !bulkMode
+          ? <a role="button" tabIndex={0} style={{ color: "#f2b441", fontWeight: 700, cursor: "pointer" }}
+              onClick={() => fileRef.current?.click()}>Upload</a>
+          : <span />}
+      </span>
     </div>
     <input ref={fileRef} type="file" multiple hidden
       accept="image/*,video/mp4,video/quicktime,video/webm" onChange={onPick} />
     <main className="wide">
       <div className="row gal-filter">
-        <select value={filter} onChange={e => setFilter(e.target.value)} aria-label="Filter gallery">
+        <select value={filter} onChange={e => setFilter(e.target.value)} aria-label="Filter gallery"
+          disabled={bulkMode}>
           <option value="all">Everyone</option>
           {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
           <option value="untagged">No location</option>
@@ -176,6 +222,18 @@ export default function GalleryView({ tripId }) {
           {filtered.length} item{filtered.length === 1 ? "" : "s"}
           {uploading > 0 && ` | uploading ${uploading}...`}</span>
       </div>
+      {bulkMode && (
+        <div className="row" style={{ gap: 8, padding: "8px 0", flexWrap: "wrap" }}>
+          <button className="small secondary" onClick={selectAllWithoutLocation}>
+            Select all without location</button>
+          {bulkSelected.size > 0 && (
+            <button className="small secondary" onClick={() => setBulkSelected(new Set())}>
+              Clear ({bulkSelected.size} selected)</button>)}
+          {bulkSelected.size === 0 && (
+            <span className="muted" style={{ fontSize: "0.85rem", alignSelf: "center" }}>
+              Tap photos to select them, or use the button above.</span>)}
+        </div>
+      )}
       {errors.map((x, i) => <p key={i} className="error">{x.name}: {x.err}</p>)}
 
       {days.length === 0 && (
@@ -187,20 +245,58 @@ export default function GalleryView({ tripId }) {
         <section key={d.key}>
           <div className="day-tag">{d.label}</div>
           <div className="gal-grid">
-            {d.items.map(p => (
-              <div key={p.id} className="gal-item"
-                onClick={() => setOpen(filtered.indexOf(p))}>
-                <img src={p.url} alt="" loading="lazy" />
-                <span className="gal-who">{initials(p.author)}</span>
-                {p.kind === "video" &&
-                  <span className="gal-vid">&#9658; {p.duration_s ? fmtDur(p.duration_s) : ""}</span>}
-                {!p.place_name && <span className="gal-noloc" title="No location">?</span>}
-              </div>))}
+            {d.items.map(p => {
+              const isSel = bulkSelected.has(p.id);
+              return (
+                <div key={p.id}
+                  className={`gal-item${bulkMode && p.kind !== "video" ? " gal-bulk" : ""}${isSel ? " gal-sel" : ""}`}
+                  onClick={() => bulkMode && p.kind !== "video"
+                    ? toggleBulk(p.id)
+                    : setOpen(filtered.indexOf(p))}>
+                  <img src={p.url} alt="" loading="lazy" />
+                  <span className="gal-who">{initials(p.author)}</span>
+                  {p.kind === "video" &&
+                    <span className="gal-vid">&#9658; {p.duration_s ? fmtDur(p.duration_s) : ""}</span>}
+                  {!p.place_name && <span className="gal-noloc" title="No location">?</span>}
+                  {bulkMode && p.kind !== "video" && (
+                    <span className="gal-check">{isSel ? "✓" : ""}</span>)}
+                </div>);
+            })}
           </div>
         </section>
       ))}
     </main>
 
+    {bulkMode && bulkSelected.size > 0 && !bulkConfirm && (
+      <div className="bulk-bar">
+        <span style={{ fontWeight: 600 }}>{bulkSelected.size} photo{bulkSelected.size !== 1 ? "s" : ""} selected</span>
+        <input type="text" value={bulkPlace} placeholder="e.g. Amsterdam, Netherlands"
+          onChange={e => setBulkPlace(e.target.value)}
+          style={{ flex: 1, minWidth: 0 }} />
+        <button disabled={!bulkPlace.trim()}
+          onClick={() => setBulkConfirm(true)}>Apply location</button>
+      </div>
+    )}
+    {bulkConfirm && (
+      <div className="lightbox" onClick={() => setBulkConfirm(false)}>
+        <div className="pm-sheet" onClick={e => e.stopPropagation()}>
+          <b>Confirm bulk location update</b>
+          <p style={{ margin: "10px 0", lineHeight: 1.5 }}>
+            Set the location of <b>{bulkSelected.size} photo{bulkSelected.size !== 1 ? "s" : ""}</b> to:
+          </p>
+          <p style={{ margin: "0 0 16px", fontStyle: "italic", color: "var(--tide)" }}>
+            &ldquo;{bulkPlace.trim()}&rdquo;
+          </p>
+          <p className="muted" style={{ margin: "0 0 16px", fontSize: "0.85rem" }}>
+            Original locations are preserved and visible in the lightbox. You can re-edit any photo individually using the Set place button.
+          </p>
+          {bulkError && <p className="error">{bulkError}</p>}
+          <button onClick={applyBulkLocation} disabled={bulkBusy}>
+            {bulkBusy ? "Applying..." : `Yes, update ${bulkSelected.size} photo${bulkSelected.size !== 1 ? "s" : ""}`}</button>
+          <button className="ghost" onClick={() => { setBulkConfirm(false); setBulkError(""); }}>Cancel</button>
+        </div>
+      </div>
+    )}
     {cur && (
       <div className="lightbox" onClick={() => setOpen(null)}>
         <div className="lb-body" onClick={e => e.stopPropagation()}>
