@@ -8,11 +8,11 @@ export async function POST(req, { params }) {
   const role = await requireMember(params.id, u.id).catch(r => r);
   if (role instanceof Response) return role;
   if (role !== "owner") return NextResponse.json({ error: "Owner only." }, { status: 403 });
-  const { instruction, scope } = await req.json();
+  const { instruction, scope, draftId } = await req.json();
   if (!instruction?.trim())
     return NextResponse.json({ error: "Tell the assistant what to change." }, { status: 400 });
   try {
-    const result = await aiEdit(u.id, params.id, instruction.trim(), scope || {});
+    const result = await aiEdit(u.id, params.id, instruction.trim(), scope || {}, draftId);
     return NextResponse.json(result);
   } catch (e) {
     return NextResponse.json({ error: String(e.message || e) }, { status: 502 });

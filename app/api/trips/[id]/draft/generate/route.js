@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { currentUser, requireMember } from "@/lib/auth";
-import { generateDraft } from "@/lib/book";
+import { createDraftRow, generateDraft } from "@/lib/book";
 
 export async function POST(req, { params }) {
   const u = await currentUser();
@@ -12,6 +12,7 @@ export async function POST(req, { params }) {
   const { mode } = await req.json();
   if (!["auto", "curated"].includes(mode))
     return NextResponse.json({ error: "Pick a generation mode." }, { status: 400 });
-  generateDraft(u.id, params.id, mode); // async; poll GET draft for status
-  return NextResponse.json({ ok: true });
+  const draftId = await createDraftRow(params.id, mode);
+  generateDraft(u.id, params.id, mode, draftId); // async; poll GET draft?draftId=X for status
+  return NextResponse.json({ ok: true, draftId });
 }
