@@ -9,7 +9,7 @@ export async function GET(_req, { params }) {
   const role = await requireMember(params.id, u.id).catch(r => r);
   if (role instanceof Response && !isSiteAdmin(u)) return role;
   const [trip] = await q(
-    `SELECT t.*, m.role AS my_role FROM trips t
+    `SELECT t.*, m.role AS my_role, m.location_prompt_dismissed FROM trips t
      LEFT JOIN trip_members m ON m.trip_id=t.id AND m.user_id=$2
      WHERE t.id=$1`, [params.id, u.id]);
   if (!trip) return NextResponse.json({ error: "Trip not found." }, { status: 404 });
@@ -52,8 +52,18 @@ export async function PATCH(req, { params }) {
   if (!u) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const role = await requireMember(params.id, u.id).catch(r => r);
   if (role instanceof Response) return role;
+  const { name, startDate, endDate, coverPhotoId, dismissLocationPrompt } = await req.json();
+
+  if (dismissLocationPrompt) {
+    // Any member can dismiss their own prompt — no owner check.
+    await q(
+      `UPDATE trip_members SET location_prompt_dismissed=true
+       WHERE trip_id=$1 AND user_id=$2`,
+      [params.id, u.id]);
+    return NextResponse.json({ ok: true });
+  }
+
   if (role !== "owner") return NextResponse.json({ error: "Owner only." }, { status: 403 });
-  const { name, startDate, endDate, coverPhotoId } = await req.json();
   await q(
     `UPDATE trips SET name=COALESCE($2,name), start_date=COALESCE($3,start_date),
        end_date=COALESCE($4,end_date), cover_photo_id=COALESCE($5,cover_photo_id)

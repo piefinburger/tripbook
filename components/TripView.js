@@ -40,6 +40,8 @@ export default function TripView({ tripId }) {
   const [photoEdit, setPhotoEdit] = useState(null);    // {id, placeName}: location edit sheet
   const [pickingNote, setPickingNote] = useState(false); // choosing a note to add selection to
   const [noteOpen, setNoteOpen] = useState(false);   // note composer popup
+  const [locationPromptDismissed, setLocationPromptDismissed] = useState(false);
+  const [showLocationPrompt, setShowLocationPrompt] = useState(false);
   const fileRef = useRef(null);
   const libraryRef = useRef(null);
 
@@ -53,6 +55,7 @@ export default function TripView({ tripId }) {
       setTrip(d.trip); setMembers(d.members || []);
       setMe(d.me); setSiteAdmin(!!d.siteAdmin);
       setMyRole(d.trip?.my_role || "member");
+      setLocationPromptDismissed(!!d.trip?.location_prompt_dismissed);
     });
   }, [tripId]);
 
@@ -139,6 +142,14 @@ export default function TripView({ tripId }) {
     setPhotoEdit(null);
     loadTimeline();
   }
+  async function dismissLocationPrompt() {
+    setShowLocationPrompt(false);
+    setLocationPromptDismissed(true);
+    await fetch(`/api/trips/${tripId}`, { method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dismissLocationPrompt: true }) });
+  }
+
   async function ungroupPhoto(photoId) {
     setPhotoMenu(null);
     const r = await fetch(`/api/photos/${photoId}`, { method: "PATCH",
@@ -159,6 +170,7 @@ export default function TripView({ tripId }) {
     e.target.value = "";
     if (!files.length) return;
     setBusy(true);
+    let hadMissingLocation = false;
     try {
     // Camera shots: tag with device location, taken-now. Library picks:
     // trust the file's own EXIF (date + GPS); never the device location,
@@ -169,6 +181,7 @@ export default function TripView({ tripId }) {
       if (source === "library" && f.type === "image/jpeg") {
         try { exif = await readJpegExif(f); } catch {}
       }
+      if (source === "library" && exif.lat == null) hadMissingLocation = true;
       const blob = await compressImage(f);
       const contentType = blob.type || f.type || "image/jpeg";
       const meta = { tripId: Number(tripId), contentType, source,
@@ -198,6 +211,9 @@ export default function TripView({ tripId }) {
     } finally {
       setBusy(false);
       loadTimeline();
+      if (source === "library" && hadMissingLocation && !locationPromptDismissed) {
+        setShowLocationPrompt(true);
+      }
     }
   }
 
@@ -465,6 +481,26 @@ export default function TripView({ tripId }) {
               <button onClick={() => downloadOriginal(lb.list[lb.i].id)}>Download</button>
               <button onClick={() => setLb(null)}>Close</button>
             </div>
+          </div>
+        </div>
+      )}
+      {showLocationPrompt && (
+        <div className="lightbox" onClick={() => { setShowLocationPrompt(false); }}>
+          <div className="pm-sheet" onClick={e => e.stopPropagation()}>
+            <b>Some photos are missing location</b>
+            <p style={{ margin: "8px 0", lineHeight: 1.5 }}>
+              Some of your photos are missing location information. To include
+              location on future uploads, go to:
+            </p>
+            <p style={{ margin: "8px 0", lineHeight: 1.5 }}>
+              <b>Settings → Privacy &amp; Security → Location Services → Photos</b>
+              {" "}and select <b>While Using App</b> or <b>Always</b>.
+            </p>
+            <p style={{ margin: "8px 0 16px", lineHeight: 1.5 }}>
+              You can still add locations manually using the ✎ button on any photo.
+            </p>
+            <button onClick={dismissLocationPrompt}>Got it</button>
+            <button className="ghost" onClick={dismissLocationPrompt}>Maybe later</button>
           </div>
         </div>
       )}

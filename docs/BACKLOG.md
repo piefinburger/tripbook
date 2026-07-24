@@ -32,7 +32,7 @@ Content-Disposition. Confirm it hasn't drifted to a derivative. Shares a
 code path with item 1, so do them together.
 
 ### 3. Notes should inherit the date of their attached photos
-Status: part bug, part feature. Real usage surfaced this.
+Status: **DONE** (2026-07-24). Server-side inheritance implemented in `POST /api/entries` and `POST /api/entries/[id]/photos`. `original_*` + `ts_source` audit trail added to both entries and photos. Created/Updated provenance shown in timeline UI.
 
 Family members wrote notes at the END of the trip and attached photos
 taken days earlier. The note got stamped `now()`, and since the timeline
@@ -49,12 +49,7 @@ Also surface each photo's own capture time in the UI, so a note's date and
 a photo's date being different is visible rather than confusing.
 
 ### 4. Manual date / time / location editing for notes and photos
-The escape hatch for whatever item 3 can't infer correctly.
-
-Watch out for: changing a timestamp re-sorts the item and can move it
-across a day divider (the timeline groups by day); location edits should
-re-run the Nominatim reverse geocode; and both need `emitTrip()` so other
-members' views update live.
+Status: **DONE** (2026-07-24). Notes: datetime-local + location text search (Nominatim forward geocode) in edit bubble. Photos: ✎ button on all photo tiles, location text search sheet, hover overlay with metadata, lightbox shows original vs updated location with editor name. Date/time editing scoped to notes only — photo editing is location-only.
 
 ---
 
@@ -127,6 +122,40 @@ dimensions.
 ---
 
 ## Quick wins, high daily value
+
+### 12. Prompt user to enable Location Services in iOS Photos after locationless library upload
+Status: **DONE** (2026-07-24). Schema: `location_prompt_dismissed BOOLEAN NOT NULL DEFAULT false` on `trip_members`. API: `location_prompt_dismissed` returned from `GET /api/trips/[id]`; `PATCH /api/trips/[id]` with `{ dismissLocationPrompt: true }` records dismissal (any member, no owner check). UI: prompt modal shown after library upload batch where any photo had null lat/lng and member hasn't dismissed yet. Both buttons dismiss and persist.
+
+
+When a contributor uploads photos from their camera roll (library pick) and one
+or more photos arrive with no lat/lng (EXIF GPS stripped — the default iOS
+behavior when Location Services is off for Photos), show a one-time-per-trip
+prompt explaining how to fix it.
+
+**Trigger:** end of a library upload batch where at least one photo had null
+lat/lng. Never triggers on camera captures (those use device GPS at capture time).
+
+**Prompt content:**
+> Some of your photos are missing location information. To include location on
+> future uploads, go to: **Settings → Privacy & Security → Location Services →
+> Photos** and select "While Using App" or "Always".
+> You can still add locations manually using the ✎ button on any photo.
+
+Two buttons: **Got it** and **Maybe later** — both dismiss; neither re-prompts
+for this user on this trip.
+
+**Tracking:** Add `location_prompt_dismissed BOOLEAN NOT NULL DEFAULT false` to
+`trip_members`. Set to `true` on first dismiss (either button). One additive
+schema change, no new tables.
+
+**Scope:** prompt only, no automatic fix. The ✎ location edit button (backlog
+#4, already shipped) is the manual remedy for photos already uploaded without
+location.
+
+**Testing note:** Seed a photo row with null lat/lng for the current user and
+trip and verify the prompt appears after the next library upload batch. A dev
+script can simulate this since real iOS EXIF behavior can't be replicated on
+Mac.
 
 ### 5. Flag new items since a member's last visit
 `users.last_active_at` already exists (hourly heartbeat in
