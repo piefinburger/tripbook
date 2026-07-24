@@ -244,6 +244,15 @@ effectively hide someone else's photo inside a note they control.
   correctness rests on manual dev-rig testing and PR review. If this ever
   warrants automation, the `LLM_MOCK=1` machinery was built to make
   Playwright-in-CI cheap.
+- **Viewer re-login UX (not a bug).** Viewers who use the invite email as
+  their "bookmark" get bounced to `/login?expired=1` when they click the
+  single-use link a second time, even though their session is still valid.
+  Two improvements: (1) show a "bookmark this page / add to home screen"
+  banner after the invite link is first consumed; (2) if a re-used or
+  expired link is clicked but the user already has a valid session, redirect
+  them straight to the trip instead of the error page. Root cause confirmed
+  as user behavior (not device/session bug) — seen only on viewers who
+  never bookmarked the trip URL.
 
 ---
 
