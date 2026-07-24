@@ -205,6 +205,25 @@ main.wide { max-width: 1280px; }
   background: rgba(0,0,0,0.65); color: #fff; border-radius: 6px; padding: 2px 6px; }
 .gal-noloc { position: absolute; bottom: 5px; right: 5px; font-size: 0.66rem; font-weight: 800;
   background: var(--tag); color: var(--ink); border-radius: 999px; padding: 2px 7px; }
+.gal-bulk { outline: 3px solid transparent; transition: outline-color 0.1s; }
+.gal-sel { outline: 3px solid var(--tide); }
+.gal-sel img { opacity: 0.75; }
+.gal-check { position: absolute; top: 5px; right: 5px; width: 22px; height: 22px;
+  border-radius: 50%; background: var(--tide); color: #fff; font-size: 0.7rem;
+  font-weight: 800; display: flex; align-items: center; justify-content: center;
+  border: 2px solid #fff; }
+.gal-sel .gal-check { background: var(--tide); }
+.gal-bulk:not(.gal-sel) .gal-check { background: rgba(255,255,255,0.6); color: transparent; }
+.bulk-bar {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 50;
+  background: var(--ink); color: #fff;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+}
+.bulk-bar input { flex: 1; min-width: 180px; background: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,0.3); color: #fff; padding: 10px 12px; }
+.bulk-bar input::placeholder { color: rgba(255,255,255,0.5); }
+.bulk-bar button { width: auto; padding: 10px 16px; font-size: 0.9rem; flex-shrink: 0; }
 .lightbox { position: fixed; inset: 0; z-index: 60; background: rgba(10,26,30,0.92);
   display: flex; align-items: center; justify-content: center; padding: 14px; }
 .lb-body { max-width: 900px; width: 100%; }
