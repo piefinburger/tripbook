@@ -18,12 +18,22 @@ export default function GalleryView({ tripId }) {
   const [filter, setFilter] = useState("all"); // all | untagged | member id
   const [open, setOpen] = useState(null);      // index into filtered
   const [queue, setQueue] = useState([]);      // {name, state: waiting|uploading|done|error, err}
-  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkMode, setBulkMode] = useState(false);       // location bulk
   const [bulkSelected, setBulkSelected] = useState(new Set());
   const [bulkPlace, setBulkPlace] = useState("");
   const [bulkConfirm, setBulkConfirm] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkError, setBulkError] = useState("");
+  const [dateMode, setDateMode] = useState(false);        // date bulk
+  const [dateSelected, setDateSelected] = useState(new Set());
+  const [dateTab, setDateTab] = useState("date");         // "date" | "offset" | "anchor"
+  const [dateNewDate, setDateNewDate] = useState("");     // YYYY-MM-DD
+  const [dateOffset, setDateOffset] = useState(0);       // integer hours
+  const [dateAnchor, setDateAnchor] = useState("");       // datetime-local string
+  const [dateConfirm, setDateConfirm] = useState(false);
+  const [dateBusy, setDateBusy] = useState(false);
+  const [dateError, setDateError] = useState("");
+  const [dateSummary, setDateSummary] = useState("");     // human-readable preview for confirm sheet
   const fileRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -159,6 +169,83 @@ export default function GalleryView({ tripId }) {
     setBulkMode(false); setBulkSelected(new Set());
     setBulkPlace(""); setBulkConfirm(false); setBulkError("");
   }
+  function exitDateMode() {
+    setDateMode(false); setDateSelected(new Set()); setDateTab("date");
+    setDateNewDate(""); setDateOffset(0); setDateAnchor("");
+    setDateConfirm(false); setDateBusy(false); setDateError(""); setDateSummary("");
+  }
+  function toggleDateSel(id) {
+    setDateSelected(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+  function selectAllDate() {
+    setDateSelected(new Set((items || []).map(p => p.id)));
+  }
+  // Compute new timestamps on the client where we know the browser timezone.
+  function buildTimestamps() {
+    const selected = (items || []).filter(p => dateSelected.has(p.id));
+    if (!selected.length) return null;
+    const result = {};
+
+    if (dateTab === "date") {
+      if (!dateNewDate) return null;
+      const [y, mo, d] = dateNewDate.split("-").map(Number);
+      for (const p of selected) {
+        const old = new Date(p.ts);
+        // Construct in local time: keep local HH:MM:SS, swap the date.
+        const newTs = new Date(y, mo - 1, d,
+          old.getHours(), old.getMinutes(), old.getSeconds(), old.getMilliseconds());
+        result[p.id] = newTs.toISOString();
+      }
+    } else if (dateTab === "offset") {
+      const ms = dateOffset * 3600000;
+      for (const p of selected) {
+        result[p.id] = new Date(new Date(p.ts).getTime() + ms).toISOString();
+      }
+    } else if (dateTab === "anchor") {
+      if (!dateAnchor) return null;
+      const sorted = [...selected].sort((a, b) => new Date(a.ts) - new Date(b.ts));
+      const earliest = sorted[0];
+      const delta = new Date(dateAnchor).getTime() - new Date(earliest.ts).getTime();
+      for (const p of selected) {
+        result[p.id] = new Date(new Date(p.ts).getTime() + delta).toISOString();
+      }
+    }
+    return result;
+  }
+  function openDateConfirm() {
+    const ts = buildTimestamps();
+    if (!ts) return;
+    const count = Object.keys(ts).length;
+    let summary = "";
+    if (dateTab === "date") summary = `Change the date of ${count} photo${count !== 1 ? "s" : ""} to ${dateNewDate} (keeping each photo's original time).`;
+    else if (dateTab === "offset") summary = `Shift ${count} photo${count !== 1 ? "s" : ""} by ${dateOffset > 0 ? "+" : ""}${dateOffset} hour${Math.abs(dateOffset) !== 1 ? "s" : ""}.`;
+    else if (dateTab === "anchor") {
+      const sorted = [...(items || [])].filter(p => dateSelected.has(p.id)).sort((a, b) => new Date(a.ts) - new Date(b.ts));
+      const earliest = sorted[0];
+      summary = `Move ${count} photo${count !== 1 ? "s" : ""} so the earliest (currently ${new Date(earliest.ts).toLocaleString()}) becomes ${new Date(dateAnchor).toLocaleString()}, preserving relative order.`;
+    }
+    setDateSummary(summary);
+    setDateConfirm(true);
+  }
+  async function applyDateBulk() {
+    setDateBusy(true); setDateError("");
+    const timestamps = buildTimestamps();
+    if (!timestamps) { setDateBusy(false); return; }
+    const r = await fetch(`/api/trips/${tripId}/photos`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ timestamps }),
+    });
+    const j = await r.json();
+    setDateBusy(false);
+    if (!r.ok) { setDateError(j.error || "Something went wrong."); return; }
+    exitDateMode();
+    load();
+  }
   function toggleBulk(id) {
     setBulkSelected(prev => {
       const next = new Set(prev);
@@ -196,13 +283,19 @@ export default function GalleryView({ tripId }) {
       <Link href={`/trip/${tripId}`} style={{ color: "#cfe3ec" }}>&larr; Timeline</Link>
       <span className="brand">Gallery</span>
       <span className="row" style={{ gap: 12 }}>
-        {canManage && !bulkMode && (
+        {canManage && !bulkMode && !dateMode && (<>
           <a role="button" tabIndex={0} style={{ color: "#cfe3ec", cursor: "pointer", fontSize: "0.9rem" }}
-            onClick={() => setBulkMode(true)}>Edit locations</a>)}
+            onClick={() => setBulkMode(true)}>Edit locations</a>
+          <a role="button" tabIndex={0} style={{ color: "#cfe3ec", cursor: "pointer", fontSize: "0.9rem" }}
+            onClick={() => setDateMode(true)}>Edit dates</a>
+        </>)}
         {bulkMode && (
           <a role="button" tabIndex={0} style={{ color: "#cfe3ec", cursor: "pointer", fontSize: "0.9rem" }}
             onClick={exitBulk}>Cancel</a>)}
-        {role !== "viewer" && !bulkMode
+        {dateMode && (
+          <a role="button" tabIndex={0} style={{ color: "#cfe3ec", cursor: "pointer", fontSize: "0.9rem" }}
+            onClick={exitDateMode}>Cancel</a>)}
+        {role !== "viewer" && !bulkMode && !dateMode
           ? <a role="button" tabIndex={0} style={{ color: "#f2b441", fontWeight: 700, cursor: "pointer" }}
               onClick={() => fileRef.current?.click()}>Upload</a>
           : <span />}
@@ -234,6 +327,17 @@ export default function GalleryView({ tripId }) {
               Tap photos to select them, or use the button above.</span>)}
         </div>
       )}
+      {dateMode && (
+        <div className="row" style={{ gap: 8, padding: "8px 0", flexWrap: "wrap" }}>
+          <button className="small secondary" onClick={selectAllDate}>Select all</button>
+          {dateSelected.size > 0 && (
+            <button className="small secondary" onClick={() => setDateSelected(new Set())}>
+              Clear ({dateSelected.size} selected)</button>)}
+          {dateSelected.size === 0 && (
+            <span className="muted" style={{ fontSize: "0.85rem", alignSelf: "center" }}>
+              Tap photos to select them, or use Select all.</span>)}
+        </div>
+      )}
       {errors.map((x, i) => <p key={i} className="error">{x.name}: {x.err}</p>)}
 
       {days.length === 0 && (
@@ -246,20 +350,25 @@ export default function GalleryView({ tripId }) {
           <div className="day-tag">{d.label}</div>
           <div className="gal-grid">
             {d.items.map(p => {
-              const isSel = bulkSelected.has(p.id);
+              const isLocSel = bulkSelected.has(p.id);
+              const isDateSel = dateSelected.has(p.id);
+              const inBulk = bulkMode && p.kind !== "video";
+              const inDate = dateMode;
               return (
                 <div key={p.id}
-                  className={`gal-item${bulkMode && p.kind !== "video" ? " gal-bulk" : ""}${isSel ? " gal-sel" : ""}`}
-                  onClick={() => bulkMode && p.kind !== "video"
-                    ? toggleBulk(p.id)
-                    : setOpen(filtered.indexOf(p))}>
+                  className={`gal-item${inBulk ? " gal-bulk" : ""}${isLocSel ? " gal-sel" : ""}${inDate && !inBulk ? " gal-bulk" : ""}${isDateSel && !isLocSel ? " gal-sel" : ""}`}
+                  onClick={() => {
+                    if (inBulk) return toggleBulk(p.id);
+                    if (inDate) return toggleDateSel(p.id);
+                    setOpen(filtered.indexOf(p));
+                  }}>
                   <img src={p.url} alt="" loading="lazy" />
                   <span className="gal-who">{initials(p.author)}</span>
                   {p.kind === "video" &&
                     <span className="gal-vid">&#9658; {p.duration_s ? fmtDur(p.duration_s) : ""}</span>}
                   {!p.place_name && <span className="gal-noloc" title="No location">?</span>}
-                  {bulkMode && p.kind !== "video" && (
-                    <span className="gal-check">{isSel ? "✓" : ""}</span>)}
+                  {(inBulk || inDate) && (
+                    <span className="gal-check">{(isLocSel || isDateSel) ? "✓" : ""}</span>)}
                 </div>);
             })}
           </div>
@@ -267,6 +376,71 @@ export default function GalleryView({ tripId }) {
       ))}
     </main>
 
+    {dateMode && dateSelected.size > 0 && !dateConfirm && (
+      <div className="bulk-bar" style={{ flexDirection: "column", alignItems: "stretch", gap: 10 }}>
+        <div className="row" style={{ gap: 0, background: "rgba(255,255,255,0.08)", borderRadius: 10, overflow: "hidden" }}>
+          {[["date","Date"],["offset","Hour offset"],["anchor","Anchor"]].map(([val, label]) => (
+            <button key={val} onClick={() => setDateTab(val)}
+              style={{ flex: 1, borderRadius: 0, padding: "9px 4px", fontSize: "0.82rem",
+                background: dateTab === val ? "var(--tide)" : "transparent",
+                color: "#fff", fontWeight: dateTab === val ? 700 : 400, border: "none" }}>
+              {label}
+            </button>))}
+        </div>
+        {dateTab === "date" && (
+          <div className="row" style={{ gap: 10 }}>
+            <input type="date" value={dateNewDate} onChange={e => setDateNewDate(e.target.value)}
+              style={{ flex: 1, minWidth: 0 }} />
+            <button disabled={!dateNewDate} onClick={openDateConfirm}
+              style={{ width: "auto", padding: "10px 16px", fontSize: "0.9rem", flexShrink: 0 }}>
+              Apply to {dateSelected.size}</button>
+          </div>
+        )}
+        {dateTab === "offset" && (
+          <div className="row" style={{ gap: 10 }}>
+            <div className="row" style={{ gap: 6, flex: 1 }}>
+              <button onClick={() => setDateOffset(h => h - 1)}
+                style={{ width: 40, padding: "10px 0", flexShrink: 0 }}>−</button>
+              <span style={{ color: "#fff", fontWeight: 700, minWidth: 80, textAlign: "center" }}>
+                {dateOffset > 0 ? "+" : ""}{dateOffset}h</span>
+              <button onClick={() => setDateOffset(h => h + 1)}
+                style={{ width: 40, padding: "10px 0", flexShrink: 0 }}>+</button>
+            </div>
+            <button disabled={dateOffset === 0} onClick={openDateConfirm}
+              style={{ width: "auto", padding: "10px 16px", fontSize: "0.9rem", flexShrink: 0 }}>
+              Apply to {dateSelected.size}</button>
+          </div>
+        )}
+        {dateTab === "anchor" && (
+          <div className="row" style={{ gap: 10 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.6)", marginBottom: 4 }}>
+                Set earliest selected photo to:</div>
+              <input type="datetime-local" value={dateAnchor} onChange={e => setDateAnchor(e.target.value)}
+                style={{ width: "100%" }} />
+            </div>
+            <button disabled={!dateAnchor} onClick={openDateConfirm}
+              style={{ width: "auto", padding: "10px 16px", fontSize: "0.9rem", flexShrink: 0, alignSelf: "flex-end" }}>
+              Apply to {dateSelected.size}</button>
+          </div>
+        )}
+      </div>
+    )}
+    {dateConfirm && (
+      <div className="lightbox" onClick={() => setDateConfirm(false)}>
+        <div className="pm-sheet" onClick={e => e.stopPropagation()}>
+          <b>Confirm date update</b>
+          <p style={{ margin: "10px 0 16px", lineHeight: 1.5 }}>{dateSummary}</p>
+          <p className="muted" style={{ margin: "0 0 16px", fontSize: "0.85rem" }}>
+            Original timestamps are preserved in the audit trail and visible in the lightbox.
+          </p>
+          {dateError && <p className="error">{dateError}</p>}
+          <button onClick={applyDateBulk} disabled={dateBusy}>
+            {dateBusy ? "Applying..." : "Yes, update timestamps"}</button>
+          <button className="ghost" onClick={() => { setDateConfirm(false); setDateError(""); }}>Cancel</button>
+        </div>
+      </div>
+    )}
     {bulkMode && bulkSelected.size > 0 && !bulkConfirm && (
       <div className="bulk-bar">
         <span style={{ fontWeight: 600 }}>{bulkSelected.size} photo{bulkSelected.size !== 1 ? "s" : ""} selected</span>
