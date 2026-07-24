@@ -31,7 +31,7 @@ export default function BookPages({ spec, photoUrls, print }) {
         .bk-chapter { display: flex; flex-direction: column; justify-content: flex-end;
           padding: 0.9in; }
         .bk-chapter h2 { font-size: 28pt; margin: 0 0 10pt; font-weight: 400; }
-        .bk-chapter .nar { font-size: 12pt; line-height: 1.7; max-width: 5.5in; }
+        .bk-chapter .nar { font-size: 12pt; line-height: 1.7; max-width: 5.5in; white-space: pre-wrap; }
         .bk-chapter::before { content: ""; position: absolute; top: 0.9in; left: 0.9in;
           width: 1.4in; height: 5px; background: #f2b441; }
         .full-bleed img { position: absolute; inset: 0; width: 100%; height: 100%;
@@ -49,7 +49,7 @@ export default function BookPages({ spec, photoUrls, print }) {
         .photo-text { display: grid; grid-template-rows: 3fr 2fr; height: 100%; }
         .photo-text img { width: 100%; height: 100%; object-fit: cover; }
         .photo-text .txt, .text-only .txt { padding: 0.6in 0.9in; font-size: 11.5pt;
-          line-height: 1.75; }
+          line-height: 1.75; white-space: pre-wrap; }
         .text-only { display: flex; align-items: center; }
         .cap-plain { padding: 0 0.9in 0.4in; font-size: 10pt; font-style: italic;
           color: #4a6a70; }

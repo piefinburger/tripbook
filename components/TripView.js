@@ -294,7 +294,7 @@ export default function TripView({ tripId }) {
                       </>
                     ) : (
                       <>
-                        {it.text && <div>{it.text}</div>}
+                        {it.text && <div style={{ whiteSpace: "pre-wrap" }}>{it.text}</div>}
                         {it.photos?.length > 0 && (
                           <div className="photo-grid">
                             {it.photos.map(p => (
