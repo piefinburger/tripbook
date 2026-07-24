@@ -28,6 +28,28 @@ export async function POST(req, { params }) {
     canModerate(role, u) ? [entry.id, ids, entry.trip_id] : [entry.id, ids, entry.trip_id, u.id]);
   if (!updated.length)
     return NextResponse.json({ error: "Those photos could not be added (already in a note, or not yours)." }, { status: 400 });
+
+  // Inherit ts/lat/lng from the earliest photo now attached to this entry.
+  // Covers the "write note first, attach photos after" flow. original_* columns
+  // preserve whatever the entry had before so item #4 can show the audit trail.
+  const [earliest] = await q(
+    `SELECT ts, lat, lng FROM photos
+     WHERE entry_id=$1 AND status='ready' AND kind='photo'
+     ORDER BY ts ASC LIMIT 1`,
+    [entry.id]);
+  if (earliest) {
+    await q(
+      `UPDATE entries SET
+         original_ts  = COALESCE(original_ts, ts),
+         original_lat = COALESCE(original_lat, lat),
+         original_lng = COALESCE(original_lng, lng),
+         ts  = $2,
+         lat = CASE WHEN $3::double precision IS NOT NULL THEN $3 ELSE lat END,
+         lng = CASE WHEN $4::double precision IS NOT NULL THEN $4 ELSE lng END
+       WHERE id=$1`,
+      [entry.id, earliest.ts, earliest.lat ?? null, earliest.lng ?? null]);
+  }
+
   emitTrip(entry.trip_id);
   return NextResponse.json({ ok: true, added: updated.length });
 }
