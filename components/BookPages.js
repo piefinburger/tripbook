@@ -5,10 +5,16 @@ export default function BookPages({ spec, photoUrls, print }) {
   const P = ({ children, className = "" }) => (
     <div className={`bk-page ${className}`}>{children}</div>
   );
-  const Img = ({ id, cls = "" }) => (
+  const Img = ({ id, cls = "", style }) => {
+    const base = { display: "block", width: "100%", height: "100%", objectFit: "cover" };
+    if (style?.objectPosition) base.objectPosition = style.objectPosition;
+    if (style?.scale && style.scale !== 1) {
+      base.transform = `scale(${style.scale})`;
+      base.transformOrigin = "center center";
+    }
     // eslint-disable-next-line @next/next/no-img-element
-    <img className={cls} src={photoUrls[id]} alt="" />
-  );
+    return <img className={cls} src={photoUrls[id]} alt="" style={base} />;
+  };
 
   return (
     <div className={`bk ${print ? "bk-print" : ""}`}>
@@ -84,6 +90,9 @@ function PageRenderer({ pg, Img, P }) {
   const ids = pg.photoIds || [];
   const cap = pg.caption || null;
   const txt = pg.text || pg.caption || null;
+  const styles = pg.photoStyles || {};
+  // StyledImg: auto-applies photoStyles crop/zoom for this page's photos
+  const SI = ({ id, cls }) => <Img id={id} cls={cls} style={styles[id]} />;
 
   switch (pg.template) {
 
@@ -92,7 +101,7 @@ function PageRenderer({ pg, Img, P }) {
       if (!ids[0]) return null;
       return (
         <P className="tpl-full-bleed">
-          <Img id={ids[0]} />
+          <SI id={ids[0]} />
           {cap && <div className="cap-overlay">{cap}</div>}
         </P>
       );
@@ -101,7 +110,7 @@ function PageRenderer({ pg, Img, P }) {
       if (!ids[0]) return null;
       return (
         <P className="tpl-photo-text">
-          <Img id={ids[0]} />
+          <SI id={ids[0]} />
           <div className="txt-block">{txt}</div>
         </P>
       );
@@ -111,7 +120,7 @@ function PageRenderer({ pg, Img, P }) {
       return (
         <P className="tpl-text-photo">
           <div className="txt-block">{txt}</div>
-          <Img id={ids[0]} />
+          <SI id={ids[0]} />
         </P>
       );
 
@@ -128,7 +137,7 @@ function PageRenderer({ pg, Img, P }) {
       return (
         <P>
           <div className={`tpl-two-equal bk-grid`}>
-            {ids.slice(0, 2).map(id => <Img key={id} id={id} />)}
+            {ids.slice(0, 2).map(id => <SI key={id} id={id} />)}
           </div>
           {cap && <div className="cap-below">{cap}</div>}
         </P>
@@ -138,7 +147,7 @@ function PageRenderer({ pg, Img, P }) {
       return (
         <P>
           <div className={`tpl-hero-left bk-grid`}>
-            {ids.slice(0, 2).map(id => <Img key={id} id={id} />)}
+            {ids.slice(0, 2).map(id => <SI key={id} id={id} />)}
           </div>
           {cap && <div className="cap-below">{cap}</div>}
         </P>
@@ -148,7 +157,7 @@ function PageRenderer({ pg, Img, P }) {
       return (
         <P>
           <div className={`tpl-hero-right bk-grid`}>
-            {ids.slice(0, 2).map(id => <Img key={id} id={id} />)}
+            {ids.slice(0, 2).map(id => <SI key={id} id={id} />)}
           </div>
           {cap && <div className="cap-below">{cap}</div>}
         </P>
@@ -158,7 +167,7 @@ function PageRenderer({ pg, Img, P }) {
       return (
         <P>
           <div className={`tpl-hero-top bk-grid`}>
-            {ids.slice(0, 2).map(id => <Img key={id} id={id} />)}
+            {ids.slice(0, 2).map(id => <SI key={id} id={id} />)}
           </div>
           {cap && <div className="cap-below">{cap}</div>}
         </P>
@@ -170,7 +179,7 @@ function PageRenderer({ pg, Img, P }) {
       return (
         <P>
           <div className={`tpl-three-banner bk-grid`}>
-            {ids.slice(0, 3).map(id => <Img key={id} id={id} />)}
+            {ids.slice(0, 3).map(id => <SI key={id} id={id} />)}
           </div>
           {cap && <div className="cap-below">{cap}</div>}
         </P>
@@ -180,7 +189,7 @@ function PageRenderer({ pg, Img, P }) {
       return (
         <P>
           <div className={`tpl-three-sidebar bk-grid`}>
-            {ids.slice(0, 3).map(id => <Img key={id} id={id} />)}
+            {ids.slice(0, 3).map(id => <SI key={id} id={id} />)}
           </div>
           {cap && <div className="cap-below">{cap}</div>}
         </P>
@@ -190,7 +199,7 @@ function PageRenderer({ pg, Img, P }) {
       return (
         <P>
           <div className={`tpl-panoramic-strip bk-grid`}>
-            {ids.slice(0, 3).map(id => <Img key={id} id={id} />)}
+            {ids.slice(0, 3).map(id => <SI key={id} id={id} />)}
           </div>
           {cap && <div className="cap-below">{cap}</div>}
         </P>
@@ -201,7 +210,7 @@ function PageRenderer({ pg, Img, P }) {
       return (
         <P>
           <div className={`tpl-four-grid bk-grid`}>
-            {ids.slice(0, 4).map(id => <Img key={id} id={id} />)}
+            {ids.slice(0, 4).map(id => <SI key={id} id={id} />)}
           </div>
           {cap && <div className="cap-below">{cap}</div>}
         </P>
@@ -211,7 +220,7 @@ function PageRenderer({ pg, Img, P }) {
       return (
         <P>
           <div className={`tpl-four-asymmetric bk-grid`}>
-            {ids.slice(0, 4).map(id => <Img key={id} id={id} />)}
+            {ids.slice(0, 4).map(id => <SI key={id} id={id} />)}
           </div>
           {cap && <div className="cap-below">{cap}</div>}
         </P>
@@ -222,9 +231,9 @@ function PageRenderer({ pg, Img, P }) {
       return (
         <P>
           <div className={`tpl-five-mosaic`}>
-            <Img id={ids[0]} cls="bk-grid" />
+            <SI id={ids[0]} cls="bk-grid" />
             <div className="mosaic-right">
-              {ids.slice(1, 5).map(id => <Img key={id} id={id} cls="bk-grid" />)}
+              {ids.slice(1, 5).map(id => <SI key={id} id={id} cls="bk-grid" />)}
             </div>
           </div>
           {cap && <div className="cap-below">{cap}</div>}
@@ -236,7 +245,7 @@ function PageRenderer({ pg, Img, P }) {
       return (
         <P>
           <div className={`tpl-six-grid bk-grid`}>
-            {ids.slice(0, 6).map(id => <Img key={id} id={id} />)}
+            {ids.slice(0, 6).map(id => <SI key={id} id={id} />)}
           </div>
           {cap && <div className="cap-below">{cap}</div>}
         </P>

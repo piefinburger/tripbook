@@ -404,6 +404,9 @@ export default function BookEditor({ tripId }) {
                       onFocus={() => { setSelectedPage(pg.id); setAwaitingSlot(null); }}
                       onPlacePhoto={(slotIdx, photoId) => placePhotoInSlot(pg.id, slotIdx, photoId)}
                       onRemovePhoto={(slotIdx) => removePhotoAtSlot(pg.id, slotIdx)}
+                      onPhotoStyle={(photoId, style) => forPage(pg.id, p => {
+                        p.photoStyles = { ...(p.photoStyles || {}), [photoId]: style };
+                      })}
                       onCaption={v => forPage(pg.id, p => { p.caption = v; })}
                       onText={v => forPage(pg.id, p => { p.text = v; })}
                       draggingPhotoId={draggingPhotoId}
