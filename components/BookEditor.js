@@ -1,6 +1,8 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import PageCanvas from "./PageCanvas";
+import TemplatePicker from "./TemplatePicker";
 
 const TPL_COUNT = {
   "full-bleed": 1, "hero-left": 2, "hero-right": 2, "hero-top": 2, "two-equal": 2,
@@ -25,6 +27,8 @@ export default function BookEditor({ tripId }) {
   const [notice, setNotice] = useState(null);
   const [instruction, setInstruction] = useState("");
   const [mode, setMode] = useState("auto");
+  const [draggingPhotoId, setDraggingPhotoId] = useState(null);
+  const [awaitingSlot, setAwaitingSlot] = useState(null); // { pageId, slotIndex }
   const saveTimer = useRef(null);
   const needRevision = useRef(true);
   const specRef = useRef(null);
@@ -104,23 +108,73 @@ export default function BookEditor({ tripId }) {
       if (pg) { fn(pg, ch, s); return; }
     }
   });
-  function placePhoto(photoId) {
-    if (!selectedPage) { setNotice({ kind: "info", text: "Tap a page first, then a photo to place it." }); return; }
-    forPage(selectedPage, (pg) => {
+
+  // Place a photo into a specific slot on a page.
+  function placePhotoInSlot(pageId, slotIndex, photoId) {
+    setAwaitingSlot(null);
+    forPage(pageId, (pg) => {
       if (pg.pinned) return;
-      if (pg.photoIds.map(Number).includes(photoId)) return;
-      if (pg.template === "photo-text") { pg.photoIds = [photoId]; return; }
-      if (pg.photoIds.length >= 3) { setNotice({ kind: "info", text: "That page is full (3 photos max). Insert a new page." }); return; }
-      pg.photoIds = [...pg.photoIds.map(Number), photoId];
-      pg.template = TPL_BY_COUNT[pg.photoIds.length];
+      const ids = [...(pg.photoIds || []).map(Number)];
+      const maxSlots = TPL_COUNT[pg.template] ?? 0;
+      if (slotIndex >= maxSlots) return;
+      // Remove the photo from wherever it already is (same page, different slot)
+      const existingIdx = ids.indexOf(Number(photoId));
+      if (existingIdx !== -1) ids.splice(existingIdx, 1, null);
+      // Place at target slot, padding with nulls if needed
+      while (ids.length <= slotIndex) ids.push(null);
+      ids[slotIndex] = Number(photoId);
+      pg.photoIds = ids.filter(x => x !== null);
     });
   }
+
+  // Place a photo into the first empty slot (or append). Used for sidebar tap-to-place.
+  function placePhotoInPage(pageId, photoId) {
+    forPage(pageId, (pg) => {
+      if (pg.pinned) return;
+      const ids = (pg.photoIds || []).map(Number);
+      const maxSlots = TPL_COUNT[pg.template] ?? 0;
+      if (ids.includes(Number(photoId))) return;
+      if (ids.length >= maxSlots) {
+        setNotice({ kind: "info", text: "Page is full. Remove a photo or choose a template with more slots." });
+        return;
+      }
+      pg.photoIds = [...ids, Number(photoId)];
+    });
+  }
+
+  function removePhotoAtSlot(pageId, slotIndex) {
+    forPage(pageId, pg => {
+      const ids = (pg.photoIds || []).map(Number);
+      ids.splice(slotIndex, 1);
+      pg.photoIds = ids;
+    });
+  }
+
+  // Legacy: remove by photoId (still used by exclude toggle)
   function removePhoto(pageId, photoId) {
     forPage(pageId, pg => {
       pg.photoIds = pg.photoIds.map(Number).filter(x => x !== Number(photoId));
-      if (pg.template !== "photo-text" || pg.photoIds.length === 0)
-        pg.template = TPL_BY_COUNT[pg.photoIds.length];
     });
+  }
+
+  function handleSlotClick(pageId, slotIndex) {
+    // If there's an awaiting slot on this page+slot, clear it; else set it
+    if (awaitingSlot?.pageId === pageId && awaitingSlot?.slotIndex === slotIndex) {
+      setAwaitingSlot(null);
+    } else {
+      setAwaitingSlot({ pageId, slotIndex });
+      setSelectedPage(pageId);
+    }
+  }
+
+  function handleSidebarPhotoClick(photoId) {
+    if (awaitingSlot) {
+      placePhotoInSlot(awaitingSlot.pageId, awaitingSlot.slotIndex, photoId);
+    } else if (selectedPage) {
+      placePhotoInPage(selectedPage, photoId);
+    } else {
+      setNotice({ kind: "info", text: "Click a page first, then a photo to place it." });
+    }
   }
   function toggleExclude(photoId) {
     mutate(s => {
@@ -130,11 +184,7 @@ export default function BookEditor({ tripId }) {
         ex.add(photoId);
         for (const ch of s.chapters) for (const pg of ch.pages) {
           if (pg.pinned) continue;
-          if (pg.photoIds.map(Number).includes(photoId)) {
-            pg.photoIds = pg.photoIds.map(Number).filter(x => x !== photoId);
-            if (pg.template !== "photo-text" || pg.photoIds.length === 0)
-              pg.template = TPL_BY_COUNT[pg.photoIds.length];
-          }
+          pg.photoIds = pg.photoIds.map(Number).filter(x => x !== Number(photoId));
         }
         for (const ch of s.chapters)
           ch.pages = ch.pages.filter(pg => pg.pinned || pg.photoIds.length || (pg.text || "").trim());
@@ -280,7 +330,10 @@ export default function BookEditor({ tripId }) {
 
   const panels = {
     photos: <TrayPanel photos={photos} usedMap={usedMap} excluded={excluded}
-      onPlace={placePhoto} onToggleExclude={toggleExclude}
+      onPlace={handleSidebarPhotoClick} onToggleExclude={toggleExclude}
+      awaitingSlot={awaitingSlot}
+      onDragStart={pid => setDraggingPhotoId(pid)}
+      onDragEnd={() => setDraggingPhotoId(null)}
       onCurate={() => runAi(
         "Review unused and in-book photos; swap in stronger ones, drop weak or duplicate ones, keep the page count similar.",
         {})} busy={busy} />,
@@ -322,27 +375,82 @@ export default function BookEditor({ tripId }) {
                   onChange={e => mutate(s => {
                     s.chapters.find(c => c.id === ch.id).narrative = e.target.value; })} />
               </div>
-              {ch.pages.map(pg => (
-                <PageCard key={pg.id} pg={pg} photoById={photoById}
-                  selected={selectedPage === pg.id}
-                  onSelect={() => setSelectedPage(pg.id)}
-                  onTemplate={t => forPage(pg.id, p => {
-                    if (TPL_COUNT[t] < p.photoIds.length) p.photoIds = p.photoIds.slice(0, TPL_COUNT[t]);
-                    p.template = t; })}
-                  onCaption={v => forPage(pg.id, p => { p.caption = v; })}
-                  onText={v => forPage(pg.id, p => { p.text = v; })}
-                  onRemovePhoto={id => removePhoto(pg.id, id)}
-                  onMove={d => movePage(pg.id, d)}
-                  onDelete={() => mutate(s => {
-                    const c = s.chapters.find(c2 => c2.pages.some(p => p.id === pg.id));
-                    c.pages = c.pages.filter(p => p.id !== pg.id); })}
-                  onPin={() => forPage(pg.id, p => { p.pinned = !p.pinned; })}
-                  onAi={instr => runAi(instr, { pageId: pg.id })}
-                  busy={busy} />
-              ))}
+              {ch.pages.map(pg => {
+                const focused = selectedPage === pg.id;
+                return (
+                  <div key={pg.id} className={`pg-card ${focused ? "pg-card-focused" : ""}`}>
+                    <div className="pg-card-header">
+                      <span style={{ fontSize: "0.75rem", color: "var(--ink-soft)" }}>
+                        {pg.pinned ? "📌 " : ""}{pg.template}
+                        {pg.photoIds?.length ? ` · ${pg.photoIds.length} photo${pg.photoIds.length > 1 ? "s" : ""}` : ""}
+                      </span>
+                      <div className="row" style={{ gap: 6 }}>
+                        <button className="small secondary" onClick={() => movePage(pg.id, -1)}>↑</button>
+                        <button className="small secondary" onClick={() => movePage(pg.id, 1)}>↓</button>
+                        <button className="small secondary" onClick={() => forPage(pg.id, p => { p.pinned = !p.pinned; })}>
+                          {pg.pinned ? "Unpin" : "Pin"}</button>
+                        <button className="small warn" disabled={pg.pinned}
+                          onClick={() => mutate(s => {
+                            const c = s.chapters.find(c2 => c2.pages.some(p => p.id === pg.id));
+                            c.pages = c.pages.filter(p => p.id !== pg.id); })}>
+                          Delete</button>
+                      </div>
+                    </div>
+
+                    <PageCanvas
+                      pg={pg}
+                      photoById={photoById}
+                      focused={focused}
+                      onFocus={() => { setSelectedPage(pg.id); setAwaitingSlot(null); }}
+                      onPlacePhoto={(slotIdx, photoId) => placePhotoInSlot(pg.id, slotIdx, photoId)}
+                      onRemovePhoto={(slotIdx) => removePhotoAtSlot(pg.id, slotIdx)}
+                      onCaption={v => forPage(pg.id, p => { p.caption = v; })}
+                      onText={v => forPage(pg.id, p => { p.text = v; })}
+                      draggingPhotoId={draggingPhotoId}
+                      awaitingSlot={awaitingSlot?.pageId === pg.id ? awaitingSlot.slotIndex : null}
+                      onSlotClick={(slotIdx) => handleSlotClick(pg.id, slotIdx)}
+                    />
+
+                    {focused && (
+                      <>
+                        <TemplatePicker
+                          current={pg.template}
+                          onChange={t => forPage(pg.id, p => {
+                            const newCount = TPL_COUNT[t] ?? 0;
+                            if (newCount < p.photoIds.length) p.photoIds = p.photoIds.slice(0, newCount);
+                            p.template = t;
+                          })}
+                        />
+                        {(pg.template === "photo-text" || pg.template === "text-photo" || pg.template === "text-only") && (
+                          <div style={{ marginTop: 8 }}>
+                            <label style={{ fontSize: "0.8rem" }}>Text</label>
+                            <textarea rows={4} value={pg.text || ""}
+                              onChange={e => forPage(pg.id, p => { p.text = e.target.value; })} />
+                          </div>
+                        )}
+                        {pg.template !== "photo-text" && pg.template !== "text-photo" && pg.template !== "text-only" && (
+                          <div style={{ marginTop: 8 }}>
+                            <label style={{ fontSize: "0.8rem" }}>Caption</label>
+                            <input value={pg.caption || ""}
+                              onChange={e => forPage(pg.id, p => { p.caption = e.target.value; })}
+                              placeholder="Caption (optional)" />
+                          </div>
+                        )}
+                        <div className="pg-card-actions">
+                          <button className="small secondary" disabled={busy === "ai"}
+                            onClick={() => runAi("Improve this page: better photo selection or caption.", { pageId: pg.id })}>
+                            {busy === "ai" ? "..." : "AI: improve page"}</button>
+                          <button className="small secondary" onClick={() => insertPage(ch.id, pg.id)}>
+                            + Insert page after</button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
               <div className="insert-page">
                 <button onClick={() => insertPage(ch.id, ch.pages[ch.pages.length - 1]?.id)}>
-                  + Insert page</button>
+                  + Insert page at end</button>
               </div>
             </section>
           ))}
@@ -381,68 +489,20 @@ export default function BookEditor({ tripId }) {
   </>);
 }
 
-function PageCard({ pg, photoById, selected, onSelect, onTemplate, onCaption, onText,
-  onRemovePhoto, onMove, onDelete, onPin, onAi, busy }) {
-  const [aiOpen, setAiOpen] = useState(false);
-  const [instr, setInstr] = useState("");
-  const imgs = pg.photoIds.map(Number).map(id => photoById[id]).filter(Boolean);
-  return (
-    <div className={`page-card ${selected ? "selected" : ""} ${pg.pinned ? "pinned" : ""}`}
-      onClick={onSelect}>
-      <div className={`page-canvas tpl-${pg.template}`}>
-        {imgs.map(p => <img key={p.id} src={p.url} alt="" />)}
-        {(pg.template === "photo-text" || pg.template === "text-only") &&
-          <div className="txt-block">{pg.text}</div>}
-      </div>
-      {pg.template !== "text-only" && (
-        <>
-          <label>Caption</label>
-          <input value={pg.caption} disabled={pg.pinned}
-            onChange={e => onCaption(e.target.value)} placeholder="Caption (optional)" />
-        </>)}
-      {(pg.template === "photo-text" || pg.template === "text-only") && (
-        <>
-          <label>Text</label>
-          <textarea rows={3} value={pg.text} disabled={pg.pinned}
-            onChange={e => onText(e.target.value)} />
-        </>)}
-      <div className="page-actions" onClick={e => e.stopPropagation()}>
-        <select value={pg.template} disabled={pg.pinned} aria-label="Page template"
-          style={{ width: "auto", padding: "6px 8px", fontSize: "0.78rem" }}
-          onChange={e => onTemplate(e.target.value)}>
-          {Object.keys(TPL_COUNT).map(t => <option key={t} value={t}>{t}</option>)}
-        </select>
-        {imgs.map(p => (
-          <button key={p.id} disabled={pg.pinned} onClick={() => onRemovePhoto(p.id)}
-            title="Remove this photo">x photo</button>))}
-        <button onClick={() => onMove(-1)}>Move up</button>
-        <button onClick={() => onMove(1)}>Move down</button>
-        <button onClick={onPin}>{pg.pinned ? "Unpin" : "Pin"}</button>
-        <button className="warn" disabled={pg.pinned} onClick={onDelete}>Delete</button>
-        <button onClick={() => setAiOpen(o => !o)}>AI: redo</button>
-      </div>
-      {aiOpen && (
-        <div className="row" style={{ marginTop: 8 }} onClick={e => e.stopPropagation()}>
-          <input value={instr} placeholder="e.g. funnier caption, swap for a better photo"
-            onChange={e => setInstr(e.target.value)} />
-          <button className="small" disabled={busy === "ai"}
-            onClick={() => { onAi(instr || "Improve this page."); setInstr(""); setAiOpen(false); }}>
-            {busy === "ai" ? "..." : "Go"}</button>
-        </div>)}
-    </div>
-  );
-}
 
-function TrayPanel({ photos, usedMap, excluded, onPlace, onToggleExclude, onCurate, busy }) {
+function TrayPanel({ photos, usedMap, excluded, onPlace, onToggleExclude, awaitingSlot,
+  onDragStart, onDragEnd, onCurate, busy }) {
   const [sort, setSort] = useState("time");
+  const [draggingId, setDraggingId] = useState(null);
   const sorted = [...photos].sort((a, b) => sort === "quality"
     ? (b.quality ?? -1) - (a.quality ?? -1) : new Date(a.ts) - new Date(b.ts));
   const inBook = photos.filter(p => usedMap.has(Number(p.id))).length;
   return (<>
     <p className="muted" style={{ margin: "0 0 8px" }}>
-      {photos.length} photos, {inBook} in book, {excluded.size} excluded.
-      Tap a page in the book, then tap a photo to place it. Long-press
-      (right-click on laptop) to exclude.</p>
+      {photos.length} photos · {inBook} in book · {excluded.size} excluded.
+      {awaitingSlot
+        ? " Tap a photo to place it in the highlighted slot."
+        : " Click a page slot, then tap a photo to place it. Drag onto a slot on desktop."}</p>
     <div className="row" style={{ marginBottom: 8 }}>
       <select value={sort} onChange={e => setSort(e.target.value)} aria-label="Sort photos">
         <option value="time">By time</option>
@@ -456,10 +516,19 @@ function TrayPanel({ photos, usedMap, excluded, onPlace, onToggleExclude, onCura
         const id = Number(p.id);
         const state = excluded.has(id) ? "ex" : usedMap.has(id) ? "in" : null;
         return (
-          <div key={id} className={`tray-item ${state === "ex" ? "excluded" : ""}`}
+          <div key={id}
+            className={`tray-item tray-item-drag ${state === "ex" ? "excluded" : ""} ${draggingId === id ? "tray-item-dragging" : ""}`}
+            draggable={state !== "ex"}
+            onDragStart={e => {
+              e.dataTransfer.setData("photoId", String(id));
+              e.dataTransfer.effectAllowed = "copy";
+              setDraggingId(id);
+              onDragStart(id);
+            }}
+            onDragEnd={() => { setDraggingId(null); onDragEnd(); }}
             onClick={() => state !== "ex" && onPlace(id)}
             onContextMenu={e => { e.preventDefault(); onToggleExclude(id); }}>
-            <img src={p.url} alt="" loading="lazy" />
+            <img src={p.url} alt="" loading="lazy" draggable={false} />
             {state && <span className={`tray-badge ${state}`}>
               {state === "in" ? "In book" : "Excluded"}</span>}
             {p.quality != null && <span className="tray-q">{p.quality}</span>}
