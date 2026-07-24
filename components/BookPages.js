@@ -13,7 +13,7 @@ export default function BookPages({ spec, photoUrls, print }) {
   return (
     <div className={`bk ${print ? "bk-print" : ""}`}>
       <style>{`
-        /* ── base ── */
+        /* ── base (book-render specific) ── */
         .bk { font-family: Georgia, "Times New Roman", serif; color: #14343b; }
         .bk-page {
           width: 8.5in; height: 8.5in; overflow: hidden; position: relative;
@@ -41,9 +41,8 @@ export default function BookPages({ spec, photoUrls, print }) {
         .bk-chapter::before { content: ""; position: absolute; top: 0.9in; left: 0.9in;
           width: 1.4in; height: 5px; background: #f2b441; }
 
-        /* ── shared image rules ── */
+        /* ── image rules (renderer only — editor uses inline styles on pg-slot img) ── */
         .bk-page img { display: block; width: 100%; height: 100%; object-fit: cover; }
-        .bk-grid img { border-radius: 6px; }
 
         /* ── caption styles ── */
         .cap-overlay {
@@ -52,114 +51,8 @@ export default function BookPages({ spec, photoUrls, print }) {
           font-size: 10.5pt; font-style: italic; max-width: 6in;
         }
         .cap-below {
-          padding: 0.15in 0.35in 0 ; font-size: 10pt; font-style: italic;
-          color: #4a6a70; line-height: 1.4;
-          flex-shrink: 0;
-        }
-
-        /* ── text block ── */
-        .txt-block { padding: 0.5in 0.7in; font-size: 11.5pt; line-height: 1.75;
-          white-space: pre-wrap; overflow: hidden; }
-
-        /* ═══════════════════════════════════════════════════
-           SINGLE-PHOTO TEMPLATES
-           ═══════════════════════════════════════════════════ */
-
-        /* full-bleed: hero image fills entire page */
-        .tpl-full-bleed { display: grid; grid-template-rows: 1fr; }
-        .tpl-full-bleed img { position: absolute; inset: 0; width: 100%; height: 100%; }
-
-        /* photo-text: photo top ~60%, text below */
-        .tpl-photo-text { display: grid; grid-template-rows: 3fr 2fr; }
-
-        /* text-photo: text left ~45%, photo right */
-        .tpl-text-photo { display: grid; grid-template-columns: 9fr 11fr; }
-
-        /* text-only: narrative / chapter opener body */
-        .tpl-text-only { display: flex; align-items: center; }
-
-        /* ═══════════════════════════════════════════════════
-           TWO-PHOTO TEMPLATES
-           ═══════════════════════════════════════════════════ */
-        .tpl-two-equal,
-        .tpl-hero-left,
-        .tpl-hero-right,
-        .tpl-hero-top {
-          display: grid; gap: 0.2in; padding: 0.35in; height: 100%;
-          box-sizing: border-box;
-        }
-        /* two-equal: side by side */
-        .tpl-two-equal { grid-template-columns: 1fr 1fr; }
-        /* hero-left: left ~70%, right ~30% */
-        .tpl-hero-left { grid-template-columns: 7fr 3fr; }
-        /* hero-right: right ~70%, left ~30% */
-        .tpl-hero-right { grid-template-columns: 3fr 7fr; }
-        /* hero-top: top ~65%, bottom ~35% */
-        .tpl-hero-top { grid-template-rows: 13fr 7fr; grid-template-columns: 1fr; }
-
-        /* ═══════════════════════════════════════════════════
-           THREE-PHOTO TEMPLATES
-           ═══════════════════════════════════════════════════ */
-        .tpl-three-banner,
-        .tpl-three-sidebar,
-        .tpl-panoramic-strip {
-          display: grid; gap: 0.2in; padding: 0.35in; height: 100%;
-          box-sizing: border-box;
-        }
-        /* three-banner: wide top, two equal below */
-        .tpl-three-banner { grid-template-rows: 3fr 2fr; grid-template-columns: 1fr 1fr; }
-        .tpl-three-banner img:first-child { grid-column: 1 / -1; }
-        /* three-sidebar: large left, two stacked right */
-        .tpl-three-sidebar { grid-template-columns: 3fr 2fr; grid-template-rows: 1fr 1fr; }
-        .tpl-three-sidebar img:first-child { grid-row: 1 / -1; }
-        /* panoramic-strip: three equal horizontal bands */
-        .tpl-panoramic-strip { grid-template-rows: 1fr 1fr 1fr; grid-template-columns: 1fr; }
-
-        /* ═══════════════════════════════════════════════════
-           FOUR-PHOTO TEMPLATES
-           ═══════════════════════════════════════════════════ */
-        .tpl-four-grid,
-        .tpl-four-asymmetric {
-          display: grid; gap: 0.2in; padding: 0.35in; height: 100%;
-          box-sizing: border-box;
-        }
-        /* four-grid: 2×2 equal */
-        .tpl-four-grid { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
-        /* four-asymmetric: large top-left, three smaller */
-        .tpl-four-asymmetric {
-          grid-template-columns: 3fr 2fr;
-          grid-template-rows: 3fr 2fr;
-        }
-        .tpl-four-asymmetric img:first-child { grid-row: 1; grid-column: 1; }
-        .tpl-four-asymmetric img:nth-child(2) { grid-row: 1; grid-column: 2; }
-        .tpl-four-asymmetric img:nth-child(3) { grid-row: 2; grid-column: 1; }
-        .tpl-four-asymmetric img:nth-child(4) { grid-row: 2; grid-column: 2; }
-
-        /* ═══════════════════════════════════════════════════
-           FIVE-PHOTO TEMPLATE
-           ═══════════════════════════════════════════════════ */
-        .tpl-five-mosaic {
-          display: grid; gap: 0.2in; padding: 0.35in; height: 100%;
-          box-sizing: border-box;
-          grid-template-columns: 3fr 2fr;
-          grid-template-rows: 1fr 1fr;
-        }
-        .tpl-five-mosaic img:first-child { grid-row: 1 / -1; }
-        /* right column: 2×2 sub-grid */
-        .tpl-five-mosaic .mosaic-right {
-          display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
-          gap: 0.2in; grid-row: 1 / -1;
-        }
-        .tpl-five-mosaic .mosaic-right img { width: 100%; height: 100%; }
-
-        /* ═══════════════════════════════════════════════════
-           SIX-PHOTO TEMPLATE
-           ═══════════════════════════════════════════════════ */
-        .tpl-six-grid {
-          display: grid; gap: 0.2in; padding: 0.35in; height: 100%;
-          box-sizing: border-box;
-          grid-template-columns: 1fr 1fr 1fr;
-          grid-template-rows: 1fr 1fr;
+          padding: 0.15in 0.35in 0; font-size: 10pt; font-style: italic;
+          color: #4a6a70; line-height: 1.4; flex-shrink: 0;
         }
       `}</style>
 
