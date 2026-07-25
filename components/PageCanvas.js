@@ -3,6 +3,7 @@
 // Phase 2 adds per-photo zoom/crop via objectPosition + scale stored in
 // pg.photoStyles[photoId].
 import { useEffect, useRef, useState, useCallback } from "react";
+import { slotImgStyle } from "@/lib/photoStyle";
 
 const PAGE_PX = 816; // 8.5in × 96dpi
 
@@ -159,21 +160,6 @@ function PhotoSlot({ photo, photoStyle, slotIndex, awaiting, dragging, cropping,
   );
 }
 
-// Shared helper: converts photoStyle → CSS object for the img element.
-// Used by both PhotoSlot (editor) and exported for use in the renderer wrapper.
-export function slotImgStyle(photoStyle = {}) {
-  const op = photoStyle.objectPosition || "50% 50%";
-  const scale = photoStyle.scale ?? 1;
-  return {
-    width: "100%", height: "100%", objectFit: "cover", display: "block",
-    objectPosition: op,
-    transform: scale !== 1 ? `scale(${scale})` : undefined,
-    // transform-origin must match objectPosition so zooming stays anchored
-    // at the focal point rather than always pulling toward center.
-    transformOrigin: scale !== 1 ? op : undefined,
-  };
-}
-
 // ── Crop overlay ──────────────────────────────────────────────────────────────
 // Click anywhere to set the focal point; drag to fine-tune.
 // Zoom slider independently controls magnification.
@@ -258,8 +244,12 @@ function CropOverlay({ photo, style, onChange, onClose }) {
       {/* focal point crosshair */}
       <div className="crop-crosshair" style={{ left: `${pos.x}%`, top: `${pos.y}%` }} />
 
-      {/* overlay UI — zoom slider + done button */}
-      <div className="crop-ui" onClick={e => e.stopPropagation()}>
+      {/* overlay UI — zoom slider + done button; must stop pointerdown so
+          clicking Done doesn't first reposition the focal point via the
+          overlay's onPointerDown handler before closing. */}
+      <div className="crop-ui"
+        onClick={e => e.stopPropagation()}
+        onPointerDown={e => e.stopPropagation()}>
         <span className="crop-hint">Click to set focus · drag to fine-tune</span>
         <div className="crop-zoom">
           <span>🔍</span>

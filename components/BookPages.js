@@ -1,7 +1,7 @@
 // Server component: renders a layout spec into square book pages.
 // `photoUrls` maps photoId -> presigned URL (previews for on-screen preview,
 // originals for the print render).
-import { slotImgStyle } from "@/components/PageCanvas";
+import { slotImgStyle } from "@/lib/photoStyle";
 
 export default function BookPages({ spec, photoUrls, print }) {
   const P = ({ children, className = "" }) => (
