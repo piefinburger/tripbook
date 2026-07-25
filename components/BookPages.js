@@ -100,6 +100,11 @@ function PageRenderer({ pg, Img, P }) {
   const cap = pg.caption || null;
   const txt = pg.text || pg.caption || null;
   const styles = pg.photoStyles || {};
+  const ov = pg.layoutOverrides || {};
+  // Inline style overrides for per-page grid proportions
+  const colStyle = ov.columns ? { gridTemplateColumns: ov.columns } : {};
+  const rowStyle = ov.rows ? { gridTemplateRows: ov.rows } : {};
+  const ovStyle = { ...colStyle, ...rowStyle };
   // StyledImg: auto-applies photoStyles crop/zoom for this page's photos
   const SI = ({ id, cls }) => <Img id={id} cls={cls} style={styles[id]} />;
 
@@ -118,7 +123,7 @@ function PageRenderer({ pg, Img, P }) {
     case "photo-text":
       if (!ids[0]) return null;
       return (
-        <P className="tpl-photo-text">
+        <P className="tpl-photo-text" style={rowStyle}>
           <SI id={ids[0]} />
           <div className="txt-block">{txt}</div>
         </P>
@@ -127,7 +132,7 @@ function PageRenderer({ pg, Img, P }) {
     case "text-photo":
       if (!ids[0]) return null;
       return (
-        <P className="tpl-text-photo">
+        <P className="tpl-text-photo" style={colStyle}>
           <div className="txt-block">{txt}</div>
           <SI id={ids[0]} />
         </P>
@@ -145,7 +150,7 @@ function PageRenderer({ pg, Img, P }) {
     case "two-up": // legacy alias
       return (
         <P>
-          <div className={`tpl-two-equal bk-grid`}>
+          <div className="tpl-two-equal bk-grid" style={colStyle}>
             {ids.slice(0, 2).map(id => <SI key={id} id={id} />)}
           </div>
           {cap && <div className="cap-below">{cap}</div>}
@@ -155,7 +160,7 @@ function PageRenderer({ pg, Img, P }) {
     case "hero-left":
       return (
         <P>
-          <div className={`tpl-hero-left bk-grid`}>
+          <div className="tpl-hero-left bk-grid" style={colStyle}>
             {ids.slice(0, 2).map(id => <SI key={id} id={id} />)}
           </div>
           {cap && <div className="cap-below">{cap}</div>}
@@ -165,7 +170,7 @@ function PageRenderer({ pg, Img, P }) {
     case "hero-right":
       return (
         <P>
-          <div className={`tpl-hero-right bk-grid`}>
+          <div className="tpl-hero-right bk-grid" style={colStyle}>
             {ids.slice(0, 2).map(id => <SI key={id} id={id} />)}
           </div>
           {cap && <div className="cap-below">{cap}</div>}
@@ -175,7 +180,7 @@ function PageRenderer({ pg, Img, P }) {
     case "hero-top":
       return (
         <P>
-          <div className={`tpl-hero-top bk-grid`}>
+          <div className="tpl-hero-top bk-grid" style={rowStyle}>
             {ids.slice(0, 2).map(id => <SI key={id} id={id} />)}
           </div>
           {cap && <div className="cap-below">{cap}</div>}
@@ -187,7 +192,7 @@ function PageRenderer({ pg, Img, P }) {
     case "three-grid": // legacy alias
       return (
         <P>
-          <div className={`tpl-three-banner bk-grid`}>
+          <div className="tpl-three-banner bk-grid" style={rowStyle}>
             {ids.slice(0, 3).map(id => <SI key={id} id={id} />)}
           </div>
           {cap && <div className="cap-below">{cap}</div>}
@@ -197,7 +202,7 @@ function PageRenderer({ pg, Img, P }) {
     case "three-sidebar":
       return (
         <P>
-          <div className={`tpl-three-sidebar bk-grid`}>
+          <div className="tpl-three-sidebar bk-grid" style={colStyle}>
             {ids.slice(0, 3).map(id => <SI key={id} id={id} />)}
           </div>
           {cap && <div className="cap-below">{cap}</div>}
@@ -207,7 +212,7 @@ function PageRenderer({ pg, Img, P }) {
     case "panoramic-strip":
       return (
         <P>
-          <div className={`tpl-panoramic-strip bk-grid`}>
+          <div className="tpl-panoramic-strip bk-grid" style={rowStyle}>
             {ids.slice(0, 3).map(id => <SI key={id} id={id} />)}
           </div>
           {cap && <div className="cap-below">{cap}</div>}
@@ -218,7 +223,7 @@ function PageRenderer({ pg, Img, P }) {
     case "four-grid":
       return (
         <P>
-          <div className={`tpl-four-grid bk-grid`}>
+          <div className="tpl-four-grid bk-grid" style={ovStyle}>
             {ids.slice(0, 4).map(id => <SI key={id} id={id} />)}
           </div>
           {cap && <div className="cap-below">{cap}</div>}
@@ -228,7 +233,7 @@ function PageRenderer({ pg, Img, P }) {
     case "four-asymmetric":
       return (
         <P>
-          <div className={`tpl-four-asymmetric bk-grid`}>
+          <div className="tpl-four-asymmetric bk-grid" style={ovStyle}>
             {ids.slice(0, 4).map(id => <SI key={id} id={id} />)}
           </div>
           {cap && <div className="cap-below">{cap}</div>}

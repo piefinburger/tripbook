@@ -417,6 +417,41 @@ main.wide { max-width: 1280px; }
   background: var(--tide); color: #fdfcf9;
   border: none; cursor: pointer; font-size: 0.85rem;
 }
+/* ── Per-page layout resize handles ─────────────────────────────────────────
+   Absolutely-positioned drag bars that sit over the gap between grid tracks.
+   Only rendered in the editor canvas when the page is focused. */
+.resize-handle {
+  position: absolute; z-index: 20;
+  display: flex; align-items: center; justify-content: center;
+}
+/* vertical bar — column split */
+.resize-handle-col {
+  width: 16px; height: 100%; top: 0;
+  transform: translateX(-50%);
+  cursor: col-resize;
+}
+.resize-handle-col::after {
+  content: ""; position: absolute;
+  width: 3px; height: 48px; border-radius: 2px;
+  background: rgba(255,255,255,0.85);
+  box-shadow: 0 0 0 1px rgba(20,52,59,0.3);
+  top: 50%; left: 50%; transform: translate(-50%, -50%);
+}
+/* horizontal bar — row split */
+.resize-handle-row {
+  height: 16px; width: 100%; left: 0;
+  transform: translateY(-50%);
+  cursor: row-resize;
+}
+.resize-handle-row::after {
+  content: ""; position: absolute;
+  height: 3px; width: 48px; border-radius: 2px;
+  background: rgba(255,255,255,0.85);
+  box-shadow: 0 0 0 1px rgba(20,52,59,0.3);
+  left: 50%; top: 50%; transform: translate(-50%, -50%);
+}
+.resize-handle:hover::after { background: var(--tide); }
+
 /* focal point crosshair */
 .crop-crosshair {
   position: absolute; pointer-events: none;

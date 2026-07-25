@@ -420,6 +420,9 @@ export default function BookEditor({ tripId }) {
                       onPhotoStyle={(photoId, style) => forPage(pg.id, p => {
                         p.photoStyles = { ...(p.photoStyles || {}), [photoId]: style };
                       })}
+                      onLayoutChange={(columns, rows) => forPage(pg.id, p => {
+                        p.layoutOverrides = { columns, rows };
+                      })}
                       onCaption={v => forPage(pg.id, p => { p.caption = v; })}
                       onText={v => forPage(pg.id, p => { p.text = v; })}
                       draggingPhotoId={draggingPhotoId}
@@ -435,8 +438,16 @@ export default function BookEditor({ tripId }) {
                             const newCount = TPL_COUNT[t] ?? 0;
                             if (newCount < p.photoIds.length) p.photoIds = p.photoIds.slice(0, newCount);
                             p.template = t;
+                            p.layoutOverrides = {}; // reset proportions when switching template
                           })}
                         />
+                        {(pg.layoutOverrides?.columns || pg.layoutOverrides?.rows) && (
+                          <div style={{ marginTop: 4, textAlign: "right" }}>
+                            <a role="button" tabIndex={0} style={{ fontSize: "0.75rem", color: "var(--tide)", cursor: "pointer" }}
+                              onClick={() => forPage(pg.id, p => { p.layoutOverrides = {}; })}>
+                              Reset proportions</a>
+                          </div>
+                        )}
                         {(pg.template === "photo-text" || pg.template === "text-photo" || pg.template === "text-only") && (
                           <div style={{ marginTop: 8 }}>
                             <label style={{ fontSize: "0.8rem" }}>Text</label>

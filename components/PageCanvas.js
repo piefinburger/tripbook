@@ -11,9 +11,10 @@ export default function PageCanvas({
   photoById,
   focused,
   onFocus,
-  onPlacePhoto,     // (slotIndex, photoId)
-  onRemovePhoto,    // (slotIndex)
-  onPhotoStyle,     // (photoId, style) — saves crop/zoom
+  onPlacePhoto,      // (slotIndex, photoId)
+  onRemovePhoto,     // (slotIndex)
+  onPhotoStyle,      // (photoId, style) — saves crop/zoom
+  onLayoutChange,    // (columns, rows) — saves grid ratio overrides
   onCaption,
   onText,
   draggingPhotoId,
@@ -70,7 +71,14 @@ export default function PageCanvas({
     );
   });
 
-  const inner = renderTemplate(pg.template, renderSlots, pg);
+  const overrides = pg.layoutOverrides || {};
+  const resizeCtx = focused && onLayoutChange ? {
+    overrides,
+    onColChange: (col) => onLayoutChange(col, overrides.rows || null),
+    onRowChange: (row) => onLayoutChange(overrides.columns || null, row),
+  } : null;
+
+  const inner = renderTemplate(pg.template, renderSlots, pg, resizeCtx);
 
   return (
     <div
@@ -286,6 +294,90 @@ function parsePos(str) {
 }
 function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 
+// ── Layout resize helpers ────────────────────────────────────────────────────
+// Parse "7fr 3fr" → [7, 3]. toFrStr([6, 4]) → "6fr 4fr".
+function parseFr(str) {
+  if (!str) return [1];
+  return str.trim().split(/\s+/).map(s => parseFloat(s) || 1);
+}
+function toFrStr(arr) {
+  return arr.map(v => `${Math.round(v * 10) / 10}fr`).join(" ");
+}
+// Position (0–1) of the first divider in a fr string.
+function trackFraction(frStr) {
+  const parts = parseFr(frStr);
+  const total = parts.reduce((a, b) => a + b, 0);
+  return total > 0 ? parts[0] / total : 0.5;
+}
+
+// ── ResizeHandle ─────────────────────────────────────────────────────────────
+// A draggable bar positioned over the gap between grid tracks.
+// containerRef must point to the grid container (for getBoundingClientRect).
+function ResizeHandle({ axis, fraction, containerRef, onFraction }) {
+  const isDragging = useRef(false);
+
+  const onPointerDown = (e) => {
+    e.stopPropagation(); e.preventDefault();
+    isDragging.current = true;
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onPointerMove = (e) => {
+    if (!isDragging.current || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const f = axis === "col"
+      ? clamp((e.clientX - rect.left) / rect.width, 0.1, 0.9)
+      : clamp((e.clientY - rect.top) / rect.height, 0.1, 0.9);
+    onFraction(f);
+  };
+  const onPointerUp = () => { isDragging.current = false; };
+
+  return (
+    <div
+      className={`resize-handle resize-handle-${axis}`}
+      style={axis === "col" ? { left: `${fraction * 100}%` } : { top: `${fraction * 100}%` }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+    />
+  );
+}
+
+// ── ResizableGrid ────────────────────────────────────────────────────────────
+// Wraps a template grid container and overlays resize handles when focused.
+// defaultCol / defaultRow are the template's built-in fr strings.
+// overrideCol / overrideRow come from pg.layoutOverrides.
+function ResizableGrid({ gridClass, defaultCol, defaultRow, overrideCol, overrideRow,
+  onColChange, onRowChange, children }) {
+  const ref = useRef(null);
+  const style = { height: "100%", position: "relative" };
+  if (defaultCol) style.gridTemplateColumns = overrideCol || defaultCol;
+  if (defaultRow) style.gridTemplateRows = overrideRow || defaultRow;
+
+  return (
+    <div ref={ref} className={`${gridClass} bk-grid`} style={style}>
+      {children}
+      {defaultCol && onColChange && (
+        <ResizeHandle axis="col"
+          fraction={trackFraction(overrideCol || defaultCol)}
+          containerRef={ref}
+          onFraction={f => {
+            const total = parseFr(overrideCol || defaultCol).reduce((a, b) => a + b, 0);
+            onColChange(toFrStr([f * total, (1 - f) * total]));
+          }} />
+      )}
+      {defaultRow && onRowChange && (
+        <ResizeHandle axis="row"
+          fraction={trackFraction(overrideRow || defaultRow)}
+          containerRef={ref}
+          onFraction={f => {
+            const total = parseFr(overrideRow || defaultRow).reduce((a, b) => a + b, 0);
+            onRowChange(toFrStr([f * total, (1 - f) * total]));
+          }} />
+      )}
+    </div>
+  );
+}
+
 // ── Template → DOM structure ──────────────────────────────────────────────────
 const TPL_SLOTS = {
   "full-bleed": 1, "hero-left": 2, "hero-right": 2, "hero-top": 2, "two-equal": 2,
@@ -295,50 +387,79 @@ const TPL_SLOTS = {
   "two-up": 2, "three-grid": 3,
 };
 
-function renderTemplate(template, renderSlots, pg) {
+// resizeCtx = { overrides, onColChange, onRowChange } when page is focused, else null.
+function renderTemplate(template, renderSlots, pg, resizeCtx) {
   const slots = renderSlots();
+  const ov = pg.layoutOverrides || {};
+  const { onColChange, onRowChange } = resizeCtx || {};
+
+  // Shorthand: resizable grid wrapper
+  const RG = ({ cls, defaultCol, defaultRow, children }) => (
+    <ResizableGrid
+      gridClass={cls}
+      defaultCol={defaultCol} defaultRow={defaultRow}
+      overrideCol={ov.columns || null} overrideRow={ov.rows || null}
+      onColChange={onColChange} onRowChange={onRowChange}
+    >{children}</ResizableGrid>
+  );
 
   switch (template) {
     case "full-bleed":
       return <div className="tpl-full-bleed" style={{ width: "100%", height: "100%" }}>{slots}</div>;
+
     case "photo-text":
       return (
-        <div className="tpl-photo-text" style={{ height: "100%" }}>
+        <RG cls="tpl-photo-text" defaultRow="3fr 2fr">
           {slots[0]}
           <div className="txt-block canvas-editable">{pg.text || <span className="slot-placeholder">Text goes here…</span>}</div>
-        </div>
+        </RG>
       );
+
     case "text-photo":
       return (
-        <div className="tpl-text-photo" style={{ height: "100%" }}>
+        <RG cls="tpl-text-photo" defaultCol="9fr 11fr">
           <div className="txt-block canvas-editable">{pg.text || <span className="slot-placeholder">Text goes here…</span>}</div>
           {slots[0]}
-        </div>
+        </RG>
       );
+
     case "text-only":
       return (
         <div className="tpl-text-only" style={{ height: "100%" }}>
           <div className="txt-block canvas-editable">{pg.text || <span className="slot-placeholder">Text goes here…</span>}</div>
         </div>
       );
+
     case "two-equal": case "two-up":
-      return <div className="tpl-two-equal bk-grid" style={{ height: "100%" }}>{slots}</div>;
+      return <RG cls="tpl-two-equal" defaultCol="1fr 1fr">{slots}</RG>;
+
     case "hero-left":
-      return <div className="tpl-hero-left bk-grid" style={{ height: "100%" }}>{slots}</div>;
+      return <RG cls="tpl-hero-left" defaultCol="7fr 3fr">{slots}</RG>;
+
     case "hero-right":
-      return <div className="tpl-hero-right bk-grid" style={{ height: "100%" }}>{slots}</div>;
+      return <RG cls="tpl-hero-right" defaultCol="3fr 7fr">{slots}</RG>;
+
     case "hero-top":
-      return <div className="tpl-hero-top bk-grid" style={{ height: "100%" }}>{slots}</div>;
+      return <RG cls="tpl-hero-top" defaultRow="13fr 7fr">{slots}</RG>;
+
     case "three-banner": case "three-grid":
-      return <div className="tpl-three-banner bk-grid" style={{ height: "100%" }}>{slots}</div>;
+      return <RG cls="tpl-three-banner" defaultRow="3fr 2fr">{slots}</RG>;
+
     case "three-sidebar":
-      return <div className="tpl-three-sidebar bk-grid" style={{ height: "100%" }}>{slots}</div>;
+      return <RG cls="tpl-three-sidebar" defaultCol="3fr 2fr">{slots}</RG>;
+
     case "panoramic-strip":
-      return <div className="tpl-panoramic-strip bk-grid" style={{ height: "100%" }}>{slots}</div>;
+      return <div className="tpl-panoramic-strip bk-grid" style={{
+        height: "100%",
+        gridTemplateRows: ov.rows || undefined,
+      }}>{slots}</div>;
+
     case "four-grid":
-      return <div className="tpl-four-grid bk-grid" style={{ height: "100%" }}>{slots}</div>;
+      return <RG cls="tpl-four-grid" defaultCol="1fr 1fr" defaultRow="1fr 1fr">{slots}</RG>;
+
     case "four-asymmetric":
-      return <div className="tpl-four-asymmetric bk-grid" style={{ height: "100%" }}>{slots}</div>;
+      return <RG cls="tpl-four-asymmetric" defaultCol="3fr 2fr" defaultRow="3fr 2fr">{slots}</RG>;
+
     case "five-mosaic":
       return (
         <div className="tpl-five-mosaic" style={{ height: "100%" }}>
@@ -346,8 +467,10 @@ function renderTemplate(template, renderSlots, pg) {
           <div className="mosaic-right">{slots.slice(1)}</div>
         </div>
       );
+
     case "six-grid":
       return <div className="tpl-six-grid bk-grid" style={{ height: "100%" }}>{slots}</div>;
+
     default:
       return <div className="tpl-text-only" style={{ height: "100%" }} />;
   }
