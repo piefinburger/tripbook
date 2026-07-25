@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import PageCanvas from "./PageCanvas";
 import TemplatePicker from "./TemplatePicker";
+import { templateToFreestyle } from "@/lib/freestyleConvert";
 
 function resWarn(w, h) {
   if (!w || !h) return null;
@@ -42,6 +43,7 @@ export default function BookEditor({ tripId }) {
   const [mode, setMode] = useState("auto");
   const [draggingPhotoId, setDraggingPhotoId] = useState(null);
   const [awaitingSlot, setAwaitingSlot] = useState(null); // { pageId, slotIndex }
+  const [selectedElementId, setSelectedElementId] = useState(null);
   const saveTimer = useRef(null);
   const needRevision = useRef(true);
   const specRef = useRef(null);
@@ -83,7 +85,14 @@ export default function BookEditor({ tripId }) {
   const usedMap = useMemo(() => {
     const m = new Map();
     for (const ch of spec?.chapters || [])
-      for (const pg of ch.pages) for (const id of pg.photoIds) m.set(Number(id), pg.id);
+      for (const pg of ch.pages) {
+        if (pg.template === "freestyle") {
+          for (const el of pg.elements || [])
+            if (el.type === "photo" && el.photoId) m.set(Number(el.photoId), pg.id);
+        } else {
+          for (const id of pg.photoIds) m.set(Number(id), pg.id);
+        }
+      }
     return m;
   }, [spec]);
   const excluded = useMemo(
@@ -236,6 +245,71 @@ export default function BookEditor({ tripId }) {
         caption: "", text: "New page. Add photos from the tray or write here.", pinned: false });
     });
     setSelectedPage(id);
+  }
+
+  // ---- freestyle helpers ---------------------------------------------------
+  const elUid = () => "el_" + Math.random().toString(16).slice(2, 10);
+
+  function convertToFreestyle(pageId) {
+    forPage(pageId, pg => {
+      const converted = templateToFreestyle(pg);
+      Object.assign(pg, converted);
+    });
+    setSelectedElementId(null);
+  }
+
+  function updateElement(pageId, elementId, changes) {
+    forPage(pageId, pg => {
+      const el = (pg.elements || []).find(e => e.id === elementId);
+      if (el) Object.assign(el, changes);
+    });
+  }
+
+  function removeElement(pageId, elementId) {
+    forPage(pageId, pg => {
+      pg.elements = (pg.elements || []).filter(e => e.id !== elementId);
+    });
+    setSelectedElementId(null);
+  }
+
+  function addElement(pageId, type) {
+    const id = elUid();
+    forPage(pageId, pg => {
+      const maxZ = Math.max(0, ...(pg.elements || []).map(e => e.zIndex || 0));
+      if (type === "photo") {
+        pg.elements = [...(pg.elements || []), {
+          id, type: "photo", x: 10, y: 10, w: 40, h: 40,
+          zIndex: maxZ + 1, photoId: null, photoStyle: {},
+        }];
+      } else {
+        pg.elements = [...(pg.elements || []), {
+          id, type: "text", x: 10, y: 60, w: 35, h: 15,
+          zIndex: maxZ + 1, text: "Text",
+          fontSize: 14, color: "#14343b", fontWeight: "normal", align: "left",
+        }];
+      }
+    });
+    setSelectedElementId(id);
+  }
+
+  function placePhotoInElement(pageId, elementId, photoId, position) {
+    forPage(pageId, pg => {
+      if (elementId) {
+        // Drop onto existing element
+        const el = (pg.elements || []).find(e => e.id === elementId);
+        if (el && el.type === "photo") el.photoId = Number(photoId);
+      } else {
+        // Drop onto empty space → create new element at position
+        const maxZ = Math.max(0, ...(pg.elements || []).map(e => e.zIndex || 0));
+        const newEl = {
+          id: elUid(), type: "photo",
+          x: position?.x ?? 10, y: position?.y ?? 10,
+          w: position?.w ?? 35, h: position?.h ?? 35,
+          zIndex: maxZ + 1, photoId: Number(photoId), photoStyle: {},
+        };
+        pg.elements = [...(pg.elements || []), newEl];
+      }
+    });
   }
 
   // ---- AI ------------------------------------------------------------------
@@ -402,7 +476,10 @@ export default function BookEditor({ tripId }) {
                     <div className="pg-card-header">
                       <span style={{ fontSize: "0.75rem", color: "var(--ink-soft)" }}>
                         {pg.pinned ? "📌 " : ""}{pg.template}
-                        {pg.photoIds?.length ? ` · ${pg.photoIds.length} photo${pg.photoIds.length > 1 ? "s" : ""}` : ""}
+                        {pg.template === "freestyle"
+                          ? (() => { const n = (pg.elements || []).filter(e => e.type === "photo" && e.photoId).length; return n ? ` · ${n} photo${n > 1 ? "s" : ""}` : ""; })()
+                          : pg.photoIds?.length ? ` · ${pg.photoIds.length} photo${pg.photoIds.length > 1 ? "s" : ""}` : ""
+                        }
                       </span>
                       <div className="row" style={{ gap: 6 }}>
                         <button className="small secondary" onClick={() => movePage(pg.id, -1)}>↑</button>
@@ -435,9 +512,52 @@ export default function BookEditor({ tripId }) {
                       draggingPhotoId={draggingPhotoId}
                       awaitingSlot={awaitingSlot?.pageId === pg.id ? awaitingSlot.slotIndex : null}
                       onSlotClick={(slotIdx) => handleSlotClick(pg.id, slotIdx)}
+                      selectedElementId={selectedPage === pg.id ? selectedElementId : null}
+                      onSelectElement={id => setSelectedElementId(id)}
+                      onUpdateElement={(elId, changes) => updateElement(pg.id, elId, changes)}
+                      onRemoveElement={(elId) => removeElement(pg.id, elId)}
+                      onPlacePhotoInElement={(elId, photoId, pos) => placePhotoInElement(pg.id, elId, photoId, pos)}
                     />
 
-                    {focused && (
+                    {focused && pg.template === "freestyle" && (
+                      <>
+                        <div className="pg-card-actions" style={{ marginTop: 6 }}>
+                          <button className="small secondary" onClick={() => addElement(pg.id, "photo")}>+ Photo</button>
+                          <button className="small secondary" onClick={() => addElement(pg.id, "text")}>+ Text</button>
+                          <button className="small secondary" onClick={() => insertPage(ch.id, pg.id)}>
+                            + Insert page after</button>
+                        </div>
+                        {selectedElementId && (() => {
+                          const el = (pg.elements || []).find(e => e.id === selectedElementId);
+                          if (!el || el.type !== "text") return null;
+                          return (
+                            <div className="fs-text-toolbar" style={{ marginTop: 6 }}>
+                              <button className={`small ${el.fontWeight === "bold" ? "" : "secondary"}`}
+                                onClick={() => updateElement(pg.id, el.id, { fontWeight: el.fontWeight === "bold" ? "normal" : "bold" })}>
+                                B</button>
+                              <button className={`small ${el.align === "left" ? "" : "secondary"}`}
+                                onClick={() => updateElement(pg.id, el.id, { align: "left" })}>L</button>
+                              <button className={`small ${el.align === "center" ? "" : "secondary"}`}
+                                onClick={() => updateElement(pg.id, el.id, { align: "center" })}>C</button>
+                              <button className={`small ${el.align === "right" ? "" : "secondary"}`}
+                                onClick={() => updateElement(pg.id, el.id, { align: "right" })}>R</button>
+                              <select value={el.fontSize || 14} style={{ width: 60 }}
+                                onChange={e => updateElement(pg.id, el.id, { fontSize: Number(e.target.value) })}>
+                                {[8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 44].map(s => (
+                                  <option key={s} value={s}>{s}pt</option>
+                                ))}
+                              </select>
+                              {["#14343b", "#4a6a70", "#f2b441", "#fdfcf9", "#ffffff", "#000000"].map(c => (
+                                <span key={c} className="fs-color-swatch"
+                                  style={{ background: c, outline: el.color === c ? "2px solid var(--tide)" : "1px solid #ccc" }}
+                                  onClick={() => updateElement(pg.id, el.id, { color: c })} />
+                              ))}
+                            </div>
+                          );
+                        })()}
+                      </>
+                    )}
+                    {focused && pg.template !== "freestyle" && (
                       <>
                         <TemplatePicker
                           current={pg.template}
@@ -448,6 +568,10 @@ export default function BookEditor({ tripId }) {
                             p.layoutOverrides = {}; // reset proportions when switching template
                           })}
                         />
+                        <div className="pg-card-actions" style={{ marginTop: 4 }}>
+                          <button className="small secondary" onClick={() => convertToFreestyle(pg.id)}>
+                            Customize freely</button>
+                        </div>
                         {(pg.layoutOverrides?.columns || pg.layoutOverrides?.rows) && (
                           <div style={{ marginTop: 4, textAlign: "right" }}>
                             <a role="button" tabIndex={0} style={{ fontSize: "0.75rem", color: "var(--tide)", cursor: "pointer" }}

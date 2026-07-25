@@ -265,6 +265,51 @@ function PageRenderer({ pg, Img, P }) {
         </P>
       );
 
+    // ── freestyle ──────────────────────────────────────────────
+    case "freestyle": {
+      const els = (pg.elements || []).slice().sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+      return (
+        <P>
+          <div style={{ position: "relative", width: "100%", height: "100%" }}>
+            {els.map(el => {
+              const pos = {
+                position: "absolute",
+                left: `${el.x}%`, top: `${el.y}%`,
+                width: `${el.w}%`, height: `${el.h}%`,
+                zIndex: el.zIndex || 1,
+                overflow: "hidden",
+              };
+              if (el.type === "photo" && el.photoId) {
+                return (
+                  <div key={el.id} style={pos}>
+                    <Img id={el.photoId} style={el.photoStyle} />
+                  </div>
+                );
+              }
+              if (el.type === "text") {
+                return (
+                  <div key={el.id} style={{
+                    ...pos,
+                    fontSize: `${el.fontSize || 12}pt`,
+                    color: el.color || "#14343b",
+                    fontWeight: el.fontWeight || "normal",
+                    textAlign: el.align || "left",
+                    whiteSpace: "pre-wrap",
+                    padding: "0.15in",
+                    lineHeight: 1.6,
+                    boxSizing: "border-box",
+                  }}>
+                    {el.text}
+                  </div>
+                );
+              }
+              return null;
+            })}
+          </div>
+        </P>
+      );
+    }
+
     default:
       return null;
   }
