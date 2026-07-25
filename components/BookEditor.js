@@ -4,6 +4,19 @@ import Link from "next/link";
 import PageCanvas from "./PageCanvas";
 import TemplatePicker from "./TemplatePicker";
 
+function resWarn(w, h) {
+  if (!w || !h) return null;
+  const shorter = Math.min(w, h);
+  if (shorter < 900) return "poor";
+  if (shorter < 1500) return "soft";
+  return null;
+}
+function resTip(w, h) {
+  if (!w || !h) return null;
+  const dpi = Math.round(Math.min(w, h) / 8.5);
+  return `${w} × ${h}px · ~${dpi} DPI at full page${dpi < 150 ? " · will print soft" : dpi < 200 ? " · may print soft in large slots" : ""}`;
+}
+
 const TPL_COUNT = {
   "full-bleed": 1, "hero-left": 2, "hero-right": 2, "hero-top": 2, "two-equal": 2,
   "three-banner": 3, "three-sidebar": 3, "panoramic-strip": 3,
@@ -535,6 +548,9 @@ function TrayPanel({ photos, usedMap, excluded, onPlace, onToggleExclude, awaiti
             {state && <span className={`tray-badge ${state}`}>
               {state === "in" ? "In book" : "Excluded"}</span>}
             {p.quality != null && <span className="tray-q">{p.quality}</span>}
+            {resWarn(p.width, p.height) && (
+              <span className={`res-warn res-warn-${resWarn(p.width, p.height)}`}
+                title={resTip(p.width, p.height)}>⚠</span>)}
           </div>);
       })}
     </div>

@@ -176,6 +176,14 @@ main.wide { max-width: 1280px; }
 .tray-badge.ex { background: var(--danger); color: #fff; }
 .tray-q { position: absolute; bottom: 4px; right: 4px; font-size: 0.6rem;
   background: rgba(20,52,59,0.8); color: #fff; padding: 1px 5px; border-radius: 6px; }
+/* resolution warning — shared between gallery grid and editor tray */
+.res-warn {
+  position: absolute; top: 4px; right: 4px;
+  font-size: 0.7rem; font-weight: 800; line-height: 1;
+  padding: 2px 5px; border-radius: 6px; pointer-events: none;
+}
+.res-warn.res-warn-soft { background: #f2b441; color: #14343b; }
+.res-warn.res-warn-poor { background: #e05c3a; color: #fff; }
 
 .settings-section { margin-bottom: 20px; }
 .task-row { display: grid; grid-template-columns: 1fr; gap: 8px;

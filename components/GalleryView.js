@@ -10,6 +10,23 @@ const initials = (name) => (name || "?").split(/\s+/).map(w => w[0]).join("").sl
 const dayKey = (ts) => new Date(ts).toDateString();
 const fmtDur = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
+// Resolution warning for print quality (8.5in page at various DPIs).
+// Returns null | "soft" | "poor".
+// "poor"  = shorter side < 900px  → will look blurry in almost any slot
+// "soft"  = shorter side < 1500px → marginal for full-bleed / large hero
+function resWarn(w, h) {
+  if (!w || !h) return null;
+  const shorter = Math.min(w, h);
+  if (shorter < 900) return "poor";
+  if (shorter < 1500) return "soft";
+  return null;
+}
+function resTip(w, h) {
+  if (!w || !h) return null;
+  const dpi = Math.round(Math.min(w, h) / 8.5);
+  return `${w} × ${h}px — ~${dpi} DPI at full page${dpi < 150 ? " · will print soft" : dpi < 200 ? " · may print soft in large slots" : ""}`;
+}
+
 export default function GalleryView({ tripId }) {
   const [items, setItems] = useState(null);
   const [members, setMembers] = useState([]);
@@ -354,6 +371,7 @@ export default function GalleryView({ tripId }) {
               const isDateSel = dateSelected.has(p.id);
               const inBulk = bulkMode && p.kind !== "video";
               const inDate = dateMode;
+              const warn = p.kind !== "video" ? resWarn(p.width, p.height) : null;
               return (
                 <div key={p.id}
                   className={`gal-item${inBulk ? " gal-bulk" : ""}${isLocSel ? " gal-sel" : ""}${inDate && !inBulk ? " gal-bulk" : ""}${isDateSel && !isLocSel ? " gal-sel" : ""}`}
@@ -367,9 +385,13 @@ export default function GalleryView({ tripId }) {
                   {p.kind === "video" &&
                     <span className="gal-vid">&#9658; {p.duration_s ? fmtDur(p.duration_s) : ""}</span>}
                   {!p.place_name && <span className="gal-noloc" title="No location">?</span>}
+                  {warn && (
+                    <span className={`res-warn res-warn-${warn}`}
+                      title={resTip(p.width, p.height)}>⚠</span>)}
                   {(inBulk || inDate) && (
                     <span className="gal-check">{(isLocSel || isDateSel) ? "✓" : ""}</span>)}
-                </div>);
+                </div>
+              );
             })}
           </div>
         </section>
@@ -482,6 +504,11 @@ export default function GalleryView({ tripId }) {
             <b>{cur.author}</b>
             <span>{new Date(cur.ts).toLocaleString()}</span>
             <span>{cur.place_name || "No location"}</span>
+            {cur.kind !== "video" && cur.width && cur.height && (
+              <span style={resWarn(cur.width, cur.height) ? { color: resWarn(cur.width, cur.height) === "poor" ? "#e05c3a" : "#f2b441" } : {}}>
+                {resTip(cur.width, cur.height)}
+              </span>
+            )}
           </div>
           <div className="lb-actions">
             {open > 0 && <button onClick={() => setOpen(open - 1)}>&larr; Prev</button>}
