@@ -15,10 +15,11 @@ export async function GET(_req, { params }) {
             p.quality, p.dup_group, u.name AS author
      FROM photos p JOIN users u ON u.id=p.user_id
      WHERE p.trip_id=$1 AND p.status='ready' AND p.kind='photo' ORDER BY p.ts`, [params.id]);
-  const urls = await urlsForPhotos(photos, ["thumb"]);
+  const urls = await urlsForPhotos(photos, ["thumb", "preview"]);
   for (const p of photos) {
     p.id = Number(p.id);
-    p.url = urls[p.id]?.thumb || null;
+    p.url = urls[p.id]?.thumb || null;       // tray thumbnail
+    p.previewUrl = urls[p.id]?.preview || null; // canvas display
     delete p.preview_key; delete p.thumb_key;
   }
   return NextResponse.json({ photos });
