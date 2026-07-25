@@ -1,19 +1,28 @@
 // Server component: renders a layout spec into square book pages.
 // `photoUrls` maps photoId -> presigned URL (previews for on-screen preview,
 // originals for the print render).
+import { slotImgStyle } from "@/components/PageCanvas";
+
 export default function BookPages({ spec, photoUrls, print }) {
   const P = ({ children, className = "" }) => (
     <div className={`bk-page ${className}`}>{children}</div>
   );
+  // Img wraps each photo in an overflow:hidden div so transform:scale clips
+  // correctly within its grid cell (without the wrapper, scale overflows into
+  // adjacent cells since CSS Grid items don't clip by default).
   const Img = ({ id, cls = "", style }) => {
-    const base = { display: "block", width: "100%", height: "100%", objectFit: "cover" };
-    if (style?.objectPosition) base.objectPosition = style.objectPosition;
+    const imgStyle = slotImgStyle(style);
+    // eslint-disable-next-line @next/next/no-img-element
+    const img = <img src={photoUrls[id]} alt="" style={imgStyle} />;
     if (style?.scale && style.scale !== 1) {
-      base.transform = `scale(${style.scale})`;
-      base.transformOrigin = "center center";
+      return (
+        <div className={cls} style={{ overflow: "hidden", width: "100%", height: "100%" }}>
+          {img}
+        </div>
+      );
     }
     // eslint-disable-next-line @next/next/no-img-element
-    return <img className={cls} src={photoUrls[id]} alt="" style={base} />;
+    return <img className={cls} src={photoUrls[id]} alt="" style={imgStyle} />;
   };
 
   return (

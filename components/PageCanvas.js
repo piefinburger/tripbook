@@ -104,12 +104,10 @@ function PhotoSlot({ photo, photoStyle, slotIndex, awaiting, dragging, cropping,
   focused, onDrop, onRemove, onClick, onStyleChange, onCropClose }) {
   const [over, setOver] = useState(false);
 
-  const imgStyle = {
-    width: "100%", height: "100%", objectFit: "cover", display: "block",
-    objectPosition: photoStyle.objectPosition || "50% 50%",
-    transform: photoStyle.scale && photoStyle.scale !== 1 ? `scale(${photoStyle.scale})` : undefined,
-    transformOrigin: "center center",
-  };
+  // Use previewUrl (1600px) for the canvas display; fall back to url (640px thumb)
+  const imgSrc = photo?.previewUrl || photo?.url;
+
+  const imgStyle = slotImgStyle(photoStyle);
 
   return (
     <div
@@ -125,7 +123,7 @@ function PhotoSlot({ photo, photoStyle, slotIndex, awaiting, dragging, cropping,
     >
       {photo ? (
         <>
-          <img src={photo.url} alt="" style={imgStyle} draggable={false} />
+          <img src={imgSrc} alt="" style={imgStyle} draggable={false} />
 
           {/* Crop overlay — shown when this slot is clicked while focused */}
           {cropping && focused && (
@@ -161,15 +159,33 @@ function PhotoSlot({ photo, photoStyle, slotIndex, awaiting, dragging, cropping,
   );
 }
 
+// Shared helper: converts photoStyle → CSS object for the img element.
+// Used by both PhotoSlot (editor) and exported for use in the renderer wrapper.
+export function slotImgStyle(photoStyle = {}) {
+  const op = photoStyle.objectPosition || "50% 50%";
+  const scale = photoStyle.scale ?? 1;
+  return {
+    width: "100%", height: "100%", objectFit: "cover", display: "block",
+    objectPosition: op,
+    transform: scale !== 1 ? `scale(${scale})` : undefined,
+    // transform-origin must match objectPosition so zooming stays anchored
+    // at the focal point rather than always pulling toward center.
+    transformOrigin: scale !== 1 ? op : undefined,
+  };
+}
+
 // ── Crop overlay ──────────────────────────────────────────────────────────────
-// Shown inside a slot when it's clicked while focused. Drag to reposition,
-// slider to zoom. Saves on close via onStyleChange.
+// Click anywhere to set the focal point; drag to fine-tune.
+// Zoom slider independently controls magnification.
 function CropOverlay({ photo, style, onChange, onClose }) {
   const [pos, setPos] = useState(() => parsePos(style.objectPosition));
   const [zoom, setZoom] = useState(style.scale ?? 1.0);
   const dragging = useRef(false);
   const startRef = useRef(null);
   const startPosRef = useRef(null);
+  const overlayRef = useRef(null);
+
+  const imgSrc = photo.previewUrl || photo.url;
 
   const commit = useCallback((newPos, newZoom) => {
     onChange({
@@ -178,23 +194,32 @@ function CropOverlay({ photo, style, onChange, onClose }) {
     });
   }, [onChange]);
 
+  // Click (and drag start): set focal point to exact click location, then
+  // allow dragging to fine-tune from there.
   const onPointerDown = (e) => {
     e.stopPropagation(); e.preventDefault();
+    const rect = overlayRef.current.getBoundingClientRect();
+    const newPos = {
+      x: clamp(((e.clientX - rect.left) / rect.width) * 100, 0, 100),
+      y: clamp(((e.clientY - rect.top) / rect.height) * 100, 0, 100),
+    };
+    setPos(newPos);
+    commit(newPos, zoom);
     dragging.current = true;
     startRef.current = { x: e.clientX, y: e.clientY };
-    startPosRef.current = { ...pos };
+    startPosRef.current = newPos;
     e.currentTarget.setPointerCapture(e.pointerId);
   };
+
+  // Drag: fine-tune from the point set by pointerdown.
+  // Sensitivity: 1px = 0.15% position change (divided by zoom so fine-tuning
+  // is easier when zoomed in).
   const onPointerMove = (e) => {
     if (!dragging.current) return;
-    // Moving pointer RIGHT → objectPosition.x decreases (pan left)
-    // Moving pointer DOWN → objectPosition.y decreases (pan up)
-    // Factor: 100px drag = ~30% position change at zoom 1
-    const dx = (e.clientX - startRef.current.x) / (3 * zoom);
-    const dy = (e.clientY - startRef.current.y) / (3 * zoom);
+    const sensitivity = 0.15 / Math.max(zoom, 1);
     const newPos = {
-      x: clamp(startPosRef.current.x - dx, 0, 100),
-      y: clamp(startPosRef.current.y - dy, 0, 100),
+      x: clamp(startPosRef.current.x + (e.clientX - startRef.current.x) * sensitivity, 0, 100),
+      y: clamp(startPosRef.current.y + (e.clientY - startRef.current.y) * sensitivity, 0, 100),
     };
     setPos(newPos);
     commit(newPos, zoom);
@@ -209,6 +234,7 @@ function CropOverlay({ photo, style, onChange, onClose }) {
 
   return (
     <div
+      ref={overlayRef}
       className="crop-overlay"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -217,21 +243,24 @@ function CropOverlay({ photo, style, onChange, onClose }) {
     >
       {/* live preview of the crop */}
       <img
-        src={photo.url}
+        src={imgSrc}
         alt=""
         style={{
           width: "100%", height: "100%", objectFit: "cover",
           objectPosition: `${pos.x}% ${pos.y}%`,
           transform: zoom !== 1 ? `scale(${zoom})` : undefined,
-          transformOrigin: "center center",
+          transformOrigin: zoom !== 1 ? `${pos.x}% ${pos.y}%` : undefined,
           display: "block", pointerEvents: "none",
         }}
         draggable={false}
       />
 
+      {/* focal point crosshair */}
+      <div className="crop-crosshair" style={{ left: `${pos.x}%`, top: `${pos.y}%` }} />
+
       {/* overlay UI — zoom slider + done button */}
       <div className="crop-ui" onClick={e => e.stopPropagation()}>
-        <span className="crop-hint">Drag to reposition</span>
+        <span className="crop-hint">Click to set focus · drag to fine-tune</span>
         <div className="crop-zoom">
           <span>🔍</span>
           <input
