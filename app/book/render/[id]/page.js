@@ -6,7 +6,8 @@ import BookPages from "@/components/BookPages";
 export const dynamic = "force-dynamic";
 
 // Fetched only by headless Chromium on localhost with a short-lived signed
-// token (see lib/pdf.js). Uses original photos for print resolution.
+// token (see lib/pdf.js). Uses preview photos (1600px) to keep Chromium
+// memory low on the 2 GB Lightsail instance.
 export default async function Render({ params, searchParams }) {
   const p = verify(searchParams.t);
   if (!p || String(p.render) !== String(params.id)) return <div>Forbidden</div>;
@@ -14,9 +15,9 @@ export default async function Render({ params, searchParams }) {
   if (!ex?.layout_spec) return <div>No spec</div>;
 
   const photos = await q(
-    "SELECT id, s3_key FROM photos WHERE trip_id=$1 AND status='ready'", [ex.trip_id]);
+    "SELECT id, preview_key, s3_key FROM photos WHERE trip_id=$1 AND status='ready'", [ex.trip_id]);
   const photoUrls = {};
-  for (const p2 of photos) photoUrls[p2.id] = await presignGet(p2.s3_key);
+  for (const p2 of photos) photoUrls[p2.id] = await presignGet(p2.preview_key || p2.s3_key);
 
   return (
     <html><body style={{ margin: 0 }}>
