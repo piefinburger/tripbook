@@ -1,8 +1,8 @@
 "use client";
 // Freestyle page canvas: renders absolutely-positioned photo and text elements
 // with selection, drag-to-move, resize handles, inline text editing,
-// crop/zoom overlay, snap guides, and dot grid.
-import { useRef, useState, useCallback, useMemo } from "react";
+// crop/zoom overlay, snap guides, dot grid, shape masks, and keyboard shortcuts.
+import { useRef, useState, useCallback, useMemo, useEffect } from "react";
 import { slotImgStyle } from "@/lib/photoStyle";
 import CropOverlay from "@/components/CropOverlay";
 
@@ -19,21 +19,25 @@ export default function FreestyleCanvas({
   const [guides, setGuides] = useState([]);
   const elements = (pg.elements || []).slice().sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
 
-  // Build snap targets from all elements + page edges/center.
-  const snapTargets = useMemo(() => {
-    const targets = { x: [0, 50, 100], y: [0, 50, 100] };
-    for (const el of pg.elements || []) {
-      targets.x.push(el.x, el.x + el.w, el.x + el.w / 2);
-      targets.y.push(el.y, el.y + el.h, el.y + el.h / 2);
-    }
-    return targets;
-  }, [pg.elements]);
+  // Keyboard shortcuts: Delete/Backspace removes selected element.
+  useEffect(() => {
+    if (!focused || !selectedElementId) return;
+    const onKey = (e) => {
+      if (e.key === "Delete" || e.key === "Backspace") {
+        // Don't intercept if user is typing in a contentEditable or input
+        const tag = e.target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || e.target.isContentEditable) return;
+        e.preventDefault();
+        onRemoveElement(selectedElementId);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [focused, selectedElementId, onRemoveElement]);
 
   // Snap a value to nearest target and return guide info.
   const snapAndGuide = useCallback((val, axis, excludeId) => {
-    const others = [];
-    // Page edges/center
-    for (const v of [0, 50, 100]) others.push(v);
+    const others = [0, 50, 100];
     for (const el of pg.elements || []) {
       if (el.id === excludeId) continue;
       if (axis === "x") { others.push(el.x, el.x + el.w, el.x + el.w / 2); }
@@ -133,6 +137,7 @@ function FreestyleElement({
 
   const photo = el.type === "photo" && el.photoId ? photoById[el.photoId] : null;
   const imgSrc = photo?.previewUrl || photo?.url;
+  const isEllipse = el.shape === "ellipse";
 
   // ── Drag to move ─────────────────────────────────────────
   const onPointerDown = (e) => {
@@ -193,6 +198,7 @@ function FreestyleElement({
       px: e.clientX, py: e.clientY,
       startX: el.x, startY: el.y, startW: el.w, startH: el.h,
       cw: rect.width, ch: rect.height,
+      aspect: el.w / el.h,
     };
     e.currentTarget.setPointerCapture(e.pointerId);
   };
@@ -204,6 +210,11 @@ function FreestyleElement({
     const s = dragStart.current;
     const MIN = 5;
     let { x, y, w, h } = { x: s.startX, y: s.startY, w: s.startW, h: s.startH };
+
+    const isCorner = resizing.length === 2; // "nw","ne","sw","se"
+    // Corner handles: always lock aspect ratio
+    // Edge handles: lock ratio only when Shift is held
+    const lockRatio = isCorner || e.shiftKey;
 
     const moveLeft = resizing.includes("w");
     const moveRight = resizing.includes("e");
@@ -221,6 +232,32 @@ function FreestyleElement({
       const newY = clamp(s.startY + dy, 0, s.startY + s.startH - MIN);
       h = s.startH + (s.startY - newY);
       y = newY;
+    }
+
+    // Aspect ratio lock: derive one dimension from the other
+    if (lockRatio) {
+      const aspect = s.aspect;
+      if (isCorner) {
+        // Use whichever axis moved more as the driver
+        const dw = Math.abs(w - s.startW);
+        const dh = Math.abs(h - s.startH);
+        if (dw >= dh) {
+          h = w / aspect;
+          if (moveTop) y = s.startY + s.startH - h;
+        } else {
+          w = h * aspect;
+          if (moveLeft) x = s.startX + s.startW - w;
+        }
+      } else {
+        // Edge handle + Shift: derive the perpendicular dimension
+        if (moveRight || moveLeft) {
+          h = w / aspect;
+        } else {
+          w = h * aspect;
+        }
+      }
+      // Re-clamp after ratio adjustment
+      w = Math.max(MIN, w); h = Math.max(MIN, h);
     }
 
     onUpdate({ x: round1(x), y: round1(y), w: round1(w), h: round1(h) });
@@ -274,24 +311,28 @@ function FreestyleElement({
       onDragLeave={el.type === "photo" ? (() => setOver(false)) : undefined}
       onDrop={el.type === "photo" ? handleDrop : undefined}
     >
-      {/* Photo element */}
+      {/* Photo element — inner wrapper clips the image */}
       {el.type === "photo" && imgSrc && !cropping && (
-        <img src={imgSrc} alt="" style={slotImgStyle(el.photoStyle)} draggable={false} />
+        <div className={`fs-photo-inner ${isEllipse ? "fs-shape-ellipse" : ""}`}>
+          <img src={imgSrc} alt="" style={slotImgStyle(el.photoStyle)} draggable={false} />
+        </div>
       )}
       {el.type === "photo" && !imgSrc && (
-        <div className="fs-photo-empty">
+        <div className={`fs-photo-empty ${isEllipse ? "fs-shape-ellipse" : ""}`}>
           {draggingPhotoId ? "Drop here" : "+"}
         </div>
       )}
 
-      {/* Crop overlay */}
+      {/* Crop overlay — rendered outside overflow clip */}
       {el.type === "photo" && cropping && photo && (
-        <CropOverlay
-          photo={photo}
-          style={el.photoStyle || {}}
-          onChange={(newStyle) => onUpdate({ photoStyle: { ...(el.photoStyle || {}), ...newStyle } })}
-          onClose={() => setCropping(false)}
-        />
+        <div className="fs-crop-wrapper">
+          <CropOverlay
+            photo={photo}
+            style={el.photoStyle || {}}
+            onChange={(newStyle) => onUpdate({ photoStyle: { ...(el.photoStyle || {}), ...newStyle } })}
+            onClose={() => setCropping(false)}
+          />
+        </div>
       )}
 
       {/* Text element */}
@@ -326,9 +367,16 @@ function FreestyleElement({
         </div>
       )}
 
-      {/* Action bar — visible above selected element */}
+      {/* Action bar — positioned outside element to avoid overflow clip */}
       {selected && focused && !cropping && (
         <div className="fs-action-bar">
+          {el.type === "photo" && (
+            <button
+              className={`fs-action-btn ${isEllipse ? "fs-action-active" : ""}`}
+              onClick={e => { e.stopPropagation(); onUpdate({ shape: isEllipse ? "rect" : "ellipse" }); }}
+              title={isEllipse ? "Rectangle" : "Circle"}
+            >{isEllipse ? "Rect" : "Circle"}</button>
+          )}
           {el.type === "photo" && imgSrc && (
             <button
               className="fs-action-btn"
