@@ -367,9 +367,9 @@ function FreestyleElement({
         </div>
       )}
 
-      {/* Action bar — positioned outside element to avoid overflow clip */}
+      {/* Action bar — stopPropagation on pointerdown so parent drag doesn't eat clicks */}
       {selected && focused && !cropping && (
-        <div className="fs-action-bar">
+        <div className="fs-action-bar" onPointerDown={e => e.stopPropagation()}>
           {el.type === "photo" && (
             <button
               className={`fs-action-btn ${isEllipse ? "fs-action-active" : ""}`}
