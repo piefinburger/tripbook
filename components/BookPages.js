@@ -280,8 +280,9 @@ function PageRenderer({ pg, Img, P }) {
                 overflow: "hidden",
               };
               if (el.type === "photo" && el.photoId) {
+                const shapeStyle = el.shape === "ellipse" ? { borderRadius: "50%" } : {};
                 return (
-                  <div key={el.id} style={pos}>
+                  <div key={el.id} style={{ ...pos, ...shapeStyle }}>
                     <Img id={el.photoId} style={el.photoStyle} />
                   </div>
                 );
