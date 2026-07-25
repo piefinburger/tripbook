@@ -89,6 +89,12 @@ label { display: block; font-size: 0.85rem; color: var(--ink-soft); margin: 12px
   position: fixed; top: calc(54px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
   background: var(--tag); color: var(--ink); font-size: 0.8rem; font-weight: 700;
   padding: 6px 14px; border-radius: 999px; z-index: 30; box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  display: flex; align-items: center; gap: 10px; white-space: nowrap;
+}
+.sync-retry {
+  background: rgba(0,0,0,0.15); border: none; border-radius: 999px;
+  padding: 2px 10px; font-size: 0.75rem; font-weight: 700; cursor: pointer;
+  color: var(--ink);
 }
 .error { color: var(--danger); font-size: 0.9rem; }
 .muted { color: var(--ink-soft); font-size: 0.9rem; }

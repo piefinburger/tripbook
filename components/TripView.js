@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import { queueItem, flushOutbox, installFlushTriggers, outboxCount,
-  compressImage, getPosition } from "@/lib/outbox";
+  outboxSummary, compressImage, getPosition } from "@/lib/outbox";
 
 const initials = (n) => (n || "?").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
 const dayKey = (ts) => new Date(ts).toLocaleDateString(undefined,
@@ -22,6 +22,7 @@ export default function TripView({ tripId }) {
   const [items, setItems] = useState([]);
   const [person, setPerson] = useState("");
   const [pending, setPending] = useState(0);
+  const [pendingSummary, setPendingSummary] = useState({ photos: 0, notes: 0 });
   const [note, setNote] = useState("");
   const [attached, setAttached] = useState([]); // photoIds already uploaded, attached to next note
   const [busy, setBusy] = useState(false);
@@ -61,8 +62,12 @@ export default function TripView({ tripId }) {
 
   useEffect(() => { loadTimeline(); }, [loadTimeline]);
   useEffect(() => {
-    installFlushTriggers(setPending);
-    outboxCount().then(setPending);
+    const updatePending = async (count) => {
+      setPending(count ?? await outboxCount());
+      setPendingSummary(await outboxSummary());
+    };
+    installFlushTriggers(updatePending);
+    updatePending();
     const poll = setInterval(() => {
       if (document.visibilityState === "visible") loadTimeline();
     }, 30000);
@@ -273,7 +278,15 @@ export default function TripView({ tripId }) {
       </div>
       </div>
       {pending > 0 && <div className="sync-chip" role="status">
-        {pending} item{pending > 1 ? "s" : ""} waiting to sync. Keep the app open on WiFi.
+        <span>
+          {[
+            pendingSummary.photos > 0 && `${pendingSummary.photos} photo${pendingSummary.photos > 1 ? "s" : ""}`,
+            pendingSummary.notes > 0 && `${pendingSummary.notes} note${pendingSummary.notes > 1 ? "s" : ""}`,
+          ].filter(Boolean).join(" + ") || `${pending} item${pending > 1 ? "s" : ""}`} waiting to upload — keep the app open on WiFi.
+        </span>
+        <button className="sync-retry" onClick={() => flushOutbox(async (n) => {
+          setPending(n); setPendingSummary(await outboxSummary());
+        })}>Retry now</button>
       </div>}
       <main>
 
