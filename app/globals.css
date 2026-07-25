@@ -488,6 +488,76 @@ main.wide { max-width: 1280px; }
 }
 .canvas-editable { cursor: text; }
 
+/* ── Freestyle page ── */
+.fs-container {
+  position: relative; width: 100%; height: 100%;
+  background: #fdfcf9;
+}
+.fs-empty {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--ink-soft); font-size: 1.4rem; font-style: italic;
+  pointer-events: none;
+}
+.fs-element {
+  overflow: hidden; touch-action: none;
+}
+.fs-element-selected {
+  outline: 2px solid var(--tide); outline-offset: -1px;
+  z-index: 100 !important;
+}
+.fs-element-moving { cursor: grabbing !important; }
+.fs-photo-empty {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--paper); color: var(--ink-soft);
+  font-size: 2rem; border: 2px dashed var(--line);
+}
+.fs-text-display {
+  width: 100%; height: 100%;
+  white-space: pre-wrap; overflow: hidden;
+  padding: 4px 8px; box-sizing: border-box;
+  line-height: 1.6;
+}
+.fs-text-editing {
+  width: 100%; height: 100%;
+  white-space: pre-wrap; overflow: auto;
+  padding: 4px 8px; box-sizing: border-box;
+  line-height: 1.6;
+  outline: 1px dashed var(--tide);
+  cursor: text;
+}
+
+/* Resize handles */
+.fs-handle {
+  position: absolute; width: 12px; height: 12px;
+  background: var(--tide); border: 2px solid #fff;
+  border-radius: 50%; z-index: 110;
+  touch-action: none;
+}
+/* Expanded touch target (44px) */
+.fs-handle::before {
+  content: ""; position: absolute; inset: -16px;
+}
+.fs-handle-nw { top: -6px; left: -6px; cursor: nw-resize; }
+.fs-handle-n  { top: -6px; left: calc(50% - 6px); cursor: n-resize; }
+.fs-handle-ne { top: -6px; right: -6px; cursor: ne-resize; }
+.fs-handle-w  { top: calc(50% - 6px); left: -6px; cursor: w-resize; }
+.fs-handle-e  { top: calc(50% - 6px); right: -6px; cursor: e-resize; }
+.fs-handle-sw { bottom: -6px; left: -6px; cursor: sw-resize; }
+.fs-handle-s  { bottom: -6px; left: calc(50% - 6px); cursor: s-resize; }
+.fs-handle-se { bottom: -6px; right: -6px; cursor: se-resize; }
+
+/* Text formatting toolbar */
+.fs-text-toolbar {
+  display: flex; gap: 4px; align-items: center; flex-wrap: wrap;
+}
+.fs-color-swatch {
+  display: inline-block; width: 20px; height: 20px;
+  border-radius: 50%; cursor: pointer;
+  vertical-align: middle;
+}
+
 /* ── Template picker ── */
 .tpl-picker {
   display: flex; flex-wrap: wrap; gap: 6px;

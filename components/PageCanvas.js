@@ -4,6 +4,7 @@
 // pg.photoStyles[photoId].
 import { useEffect, useRef, useState, useCallback } from "react";
 import { slotImgStyle } from "@/lib/photoStyle";
+import FreestyleCanvas from "@/components/FreestyleCanvas";
 
 const PAGE_PX = 816; // 8.5in × 96dpi
 
@@ -21,6 +22,12 @@ export default function PageCanvas({
   draggingPhotoId,
   awaitingSlot,
   onSlotClick,
+  // Freestyle props
+  selectedElementId,
+  onSelectElement,
+  onUpdateElement,
+  onRemoveElement,
+  onPlacePhotoInElement,
 }) {
   const wrapperRef = useRef(null);
   const [canvasScale, setCanvasScale] = useState(0.27);
@@ -38,6 +45,35 @@ export default function PageCanvas({
 
   // Close crop overlay when page loses focus
   useEffect(() => { if (!focused) setCroppingPhotoId(null); }, [focused]);
+
+  // ── Freestyle delegation ──────────────────────────────────
+  if (pg.template === "freestyle") {
+    return (
+      <div
+        ref={wrapperRef}
+        className={`page-canvas-wrap ${focused ? "page-canvas-focused" : ""}`}
+        onClick={!focused ? onFocus : undefined}
+        title={focused ? undefined : "Click to edit this page"}
+      >
+        <div
+          className="page-canvas-inner"
+          style={{ width: PAGE_PX, height: PAGE_PX, transform: `scale(${canvasScale})`, transformOrigin: "top left" }}
+        >
+          <FreestyleCanvas
+            pg={pg}
+            photoById={photoById}
+            focused={focused}
+            selectedElementId={selectedElementId}
+            onSelectElement={onSelectElement}
+            onUpdateElement={onUpdateElement}
+            onRemoveElement={onRemoveElement}
+            onPlacePhotoInElement={onPlacePhotoInElement}
+            draggingPhotoId={draggingPhotoId}
+          />
+        </div>
+      </div>
+    );
+  }
 
   const ids = pg.photoIds || [];
   const photoStyles = pg.photoStyles || {};
