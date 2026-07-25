@@ -528,6 +528,48 @@ main.wide { max-width: 1280px; }
   cursor: text;
 }
 
+/* Dot grid — subtle positioning aid */
+.fs-dot-grid {
+  position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background-image: radial-gradient(circle, var(--line) 1px, transparent 1px);
+  background-size: 5% 5%;
+  opacity: 0.5;
+}
+
+/* Snap guide lines */
+.fs-guide {
+  position: absolute; z-index: 200; pointer-events: none;
+}
+.fs-guide-x {
+  top: 0; bottom: 0; width: 1px;
+  background: var(--tide); opacity: 0.7;
+}
+.fs-guide-y {
+  left: 0; right: 0; height: 1px;
+  background: var(--tide); opacity: 0.7;
+}
+
+/* Action bar — floats above selected element */
+.fs-action-bar {
+  position: absolute; bottom: 100%; left: 50%;
+  transform: translateX(-50%);
+  display: flex; gap: 4px;
+  padding: 4px; margin-bottom: 4px;
+  background: var(--card); border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  z-index: 120; white-space: nowrap;
+}
+.fs-action-btn {
+  font: 600 12px/1 -apple-system, sans-serif;
+  padding: 6px 12px; border: none; border-radius: 4px;
+  cursor: pointer; background: var(--paper); color: var(--ink);
+  min-height: 44px; min-width: 44px;
+  display: flex; align-items: center; justify-content: center;
+}
+.fs-action-btn:active { background: var(--line); }
+.fs-action-delete { color: var(--danger); }
+.fs-action-delete:active { background: #fde8e4; }
+
 /* Resize handles */
 .fs-handle {
   position: absolute; width: 12px; height: 12px;
