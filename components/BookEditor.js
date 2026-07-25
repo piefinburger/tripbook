@@ -112,6 +112,12 @@ export default function BookEditor({ tripId }) {
     if (!r.ok) setNotice({ kind: "error",
       text: (await r.json()).error || "Save failed. Your last change was not stored." });
   }
+  // Flush any pending autosave immediately, then open preview in a new tab.
+  async function saveAndPreview() {
+    clearTimeout(saveTimer.current);
+    await save();
+    window.open(`/book/preview/draft/${tripId}?draftId=${activeDraftId}`, "_blank");
+  }
   useEffect(() => () => clearTimeout(saveTimer.current), []);
 
   // ---- page helpers ---------------------------------------------------------
@@ -288,8 +294,9 @@ export default function BookEditor({ tripId }) {
         {revisions.length > 0 &&
           <a role="button" tabIndex={0} style={{ color: "#cfe3ec", cursor: "pointer" }}
             onClick={() => restore(revisions[0].id)}>Undo</a>}
-        <Link href={`/book/preview/draft/${tripId}?draftId=${activeDraftId}`}
-          style={{ color: "#f2b441", fontWeight: 700 }}>Preview</Link>
+        <button onClick={saveAndPreview}
+          style={{ color: "#f2b441", fontWeight: 700, background: "none", border: "none", cursor: "pointer", padding: 0, font: "inherit" }}>
+          Preview</button>
       </span>
     </div>
   );
