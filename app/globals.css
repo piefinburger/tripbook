@@ -536,6 +536,10 @@ main.wide { max-width: 1280px; }
 
 /* border-radius for grid photos — both img (renderer) and .pg-slot (editor) */
 .bk-grid > img, .bk-grid > .pg-slot { border-radius: 6px; }
+/* In the renderer, imgs are direct grid children. Their intrinsic dimensions
+   can skew 1fr track sizing (making rows/cols unequal). Suppress that here.
+   pg-slot divs are unaffected (divs have no intrinsic size). */
+.bk-grid > img { min-height: 0; min-width: 0; }
 .tpl-five-mosaic .mosaic-right > img,
 .tpl-five-mosaic .mosaic-right > .pg-slot { border-radius: 6px; width: 100%; height: 100%; }
 
