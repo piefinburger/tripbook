@@ -1,3 +1,4 @@
+# tripbook.pfeif.us — production
 tripbook.pfeif.us {
     reverse_proxy app:3000
     encode gzip
