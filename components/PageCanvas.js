@@ -254,9 +254,8 @@ function CropOverlay({ photo, style, onChange, onClose }) {
       {/* focal point crosshair */}
       <div className="crop-crosshair" style={{ left: `${pos.x}%`, top: `${pos.y}%` }} />
 
-      {/* overlay UI — zoom slider + done button */}
-      <div className="crop-ui" onClick={e => e.stopPropagation()}>
-        <span className="crop-hint">Click to set focus · drag to fine-tune</span>
+      {/* compact toolbar at top — keeps bottom of image fully accessible */}
+      <div className="crop-ui" onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
         <div className="crop-zoom">
           <span>🔍</span>
           <input
@@ -265,7 +264,7 @@ function CropOverlay({ photo, style, onChange, onClose }) {
             onChange={onZoom}
             onPointerDown={e => e.stopPropagation()}
           />
-          <span>{Math.round(zoom * 100)}%</span>
+          <span className="crop-zoom-pct">{Math.round(zoom * 100)}%</span>
         </div>
         <button className="crop-done" onClick={e => { e.stopPropagation(); onClose(); }}>
           ✓ Done
@@ -313,8 +312,8 @@ function ResizeHandle({ axis, fraction, containerRef, onFraction }) {
     if (!isDragging.current || !containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
     const f = axis === "col"
-      ? clamp((e.clientX - rect.left) / rect.width, 0.1, 0.9)
-      : clamp((e.clientY - rect.top) / rect.height, 0.1, 0.9);
+      ? clamp((e.clientX - rect.left) / rect.width, 0.05, 0.95)
+      : clamp((e.clientY - rect.top) / rect.height, 0.05, 0.95);
     onFraction(f);
   };
   const onPointerUp = () => { isDragging.current = false; };

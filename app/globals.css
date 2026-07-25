@@ -399,23 +399,25 @@ main.wide { max-width: 1280px; }
   cursor: crosshair; overflow: hidden;
   border: 3px solid var(--tide);
 }
+/* Compact single-row toolbar at the TOP so the bottom of the image stays
+   fully accessible for clicking/dragging the focal point. */
 .crop-ui {
-  position: absolute; bottom: 0; left: 0; right: 0;
-  background: rgba(20,52,59,0.82); color: #fdfcf9;
-  padding: 8px 12px;
-  display: flex; flex-direction: column; gap: 6px;
+  position: absolute; top: 0; left: 0; right: 0;
+  background: rgba(20,52,59,0.78); color: #fdfcf9;
+  padding: 4px 8px;
+  display: flex; flex-direction: row; align-items: center; gap: 6px;
   z-index: 30;
 }
-.crop-hint { font-size: 0.75rem; opacity: 0.8; }
 .crop-zoom {
-  display: flex; align-items: center; gap: 8px; font-size: 0.8rem;
+  display: flex; align-items: center; gap: 6px; font-size: 0.75rem; flex: 1;
 }
-.crop-zoom input[type=range] { flex: 1; cursor: pointer; }
+.crop-zoom input[type=range] { flex: 1; min-width: 0; cursor: pointer; height: 14px; }
+.crop-zoom-pct { min-width: 2.8rem; text-align: right; font-size: 0.75rem; }
 .crop-done {
-  align-self: flex-end;
-  padding: 4px 14px; border-radius: 4px;
+  padding: 2px 10px; border-radius: 4px;
   background: var(--tide); color: #fdfcf9;
-  border: none; cursor: pointer; font-size: 0.85rem;
+  border: none; cursor: pointer; font-size: 0.8rem; white-space: nowrap;
+  flex-shrink: 0;
 }
 /* ── Per-page layout resize handles ─────────────────────────────────────────
    Absolutely-positioned drag bars that sit over the gap between grid tracks.
@@ -426,31 +428,33 @@ main.wide { max-width: 1280px; }
 }
 /* vertical bar — column split */
 .resize-handle-col {
-  width: 16px; height: 100%; top: 0;
+  width: 28px; height: 100%; top: 0;
   transform: translateX(-50%);
   cursor: col-resize;
 }
 .resize-handle-col::after {
   content: ""; position: absolute;
-  width: 3px; height: 48px; border-radius: 2px;
-  background: rgba(255,255,255,0.85);
-  box-shadow: 0 0 0 1px rgba(20,52,59,0.3);
+  width: 4px; height: 64px; border-radius: 3px;
+  background: rgba(255,255,255,0.92);
+  box-shadow: 0 0 0 1px rgba(20,52,59,0.4), 0 0 6px rgba(0,0,0,0.3);
   top: 50%; left: 50%; transform: translate(-50%, -50%);
 }
 /* horizontal bar — row split */
 .resize-handle-row {
-  height: 16px; width: 100%; left: 0;
+  height: 28px; width: 100%; left: 0;
   transform: translateY(-50%);
   cursor: row-resize;
 }
 .resize-handle-row::after {
   content: ""; position: absolute;
-  height: 3px; width: 48px; border-radius: 2px;
-  background: rgba(255,255,255,0.85);
-  box-shadow: 0 0 0 1px rgba(20,52,59,0.3);
+  height: 4px; width: 64px; border-radius: 3px;
+  background: rgba(255,255,255,0.92);
+  box-shadow: 0 0 0 1px rgba(20,52,59,0.4), 0 0 6px rgba(0,0,0,0.3);
   left: 50%; top: 50%; transform: translate(-50%, -50%);
 }
-.resize-handle:hover::after { background: var(--tide); }
+.resize-handle:hover::after { background: var(--tide); width: 80px; }
+.resize-handle-col:hover::after { width: 6px; height: 80px; }
+.resize-handle-row:hover::after { height: 6px; width: 80px; }
 
 /* focal point crosshair */
 .crop-crosshair {
