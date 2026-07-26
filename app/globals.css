@@ -94,8 +94,9 @@ label { display: block; font-size: 0.85rem; color: var(--ink-soft); margin: 12px
 .sync-retry {
   background: rgba(0,0,0,0.15); border: none; border-radius: 999px;
   padding: 2px 10px; font-size: 0.75rem; font-weight: 700; cursor: pointer;
-  color: var(--ink);
+  color: var(--ink); margin-left: 4px;
 }
+.sync-clear { color: var(--danger); }
 .error { color: var(--danger); font-size: 0.9rem; }
 .muted { color: var(--ink-soft); font-size: 0.9rem; }
 .row { display: flex; gap: 10px; align-items: center; }

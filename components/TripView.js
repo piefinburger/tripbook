@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import { queueItem, flushOutbox, installFlushTriggers, outboxCount,
-  outboxSummary, compressImage, getPosition } from "@/lib/outbox";
+  outboxSummary, clearOutbox, compressImage, getPosition } from "@/lib/outbox";
 
 const initials = (n) => (n || "?").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
 const dayKey = (ts) => new Date(ts).toLocaleDateString(undefined,
@@ -286,7 +286,11 @@ export default function TripView({ tripId }) {
         </span>
         <button className="sync-retry" onClick={() => flushOutbox(async (n) => {
           setPending(n); setPendingSummary(await outboxSummary());
-        })}>Retry now</button>
+        })}>Retry</button>
+        <button className="sync-retry sync-clear" onClick={async () => {
+          await clearOutbox();
+          setPending(0); setPendingSummary({ total: 0, photos: 0, notes: 0 });
+        }}>Clear</button>
       </div>}
       <main>
 
